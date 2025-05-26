@@ -1,0 +1,9 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+**/Uploads/**
+.idea/
+FileSharing.sln.DotSettings.user
+appsettings.json
