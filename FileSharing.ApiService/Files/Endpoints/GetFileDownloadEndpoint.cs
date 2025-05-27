@@ -1,15 +1,19 @@
 ﻿using FastEndpoints;
+using FileSharing.Constants;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace FileSharing.ApiService.Files.Endpoints;
 
 public class GetFileDownloadEndpoint : EndpointWithoutRequest
 {
     private readonly IFileService _fileService;
+    private readonly HybridCache _cache;
 
-    public GetFileDownloadEndpoint(IFileService fileService)
+    public GetFileDownloadEndpoint(IFileService fileService, HybridCache cache)
     {
         _fileService = fileService;
+        _cache = cache;
     }
     
     public override void Configure()
@@ -18,41 +22,64 @@ public class GetFileDownloadEndpoint : EndpointWithoutRequest
         AllowAnonymous();
     }
 
-    public override async Task HandleAsync(CancellationToken ct)
+    public override async Task HandleAsync(CancellationToken token)
     {
         var fileIdStr = Route<string>("fileId");
 
         if (!Guid.TryParseExact(fileIdStr, "N", out var fileId))
         {
-            await SendNotFoundAsync(ct);
+            await SendNotFoundAsync(token);
             return;
         }
 
         var file = await GetFile(fileId);
         if (file == null)
         {
-            await SendNotFoundAsync(ct);
+            await SendNotFoundAsync(token);
             return;
         }
         
         var newFileName = $"{file.Id:N}.{file.Extension}";
         var filePath = Path.Combine(file.GetLocation(), newFileName);
         
-        if (!File.Exists(filePath))
+        var fileInfo = new FileInfo(filePath);
+        if (!fileInfo.Exists)
         {
             AddError("File not found internally");
-            await SendErrorsAsync(StatusCodes.Status500InternalServerError, ct);
+            await SendErrorsAsync(StatusCodes.Status500InternalServerError, token);
             return;
         }
         
-        var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        
+        if (fileInfo.Length > Limits.MaxCachedFileSize)
+        {
+            await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            
+            await SendStreamAsync(
+                stream: fileStream,
+                fileName: file.Name,
+                fileLengthBytes: fileStream.Length,
+                contentType: GetContentTypeMime(file.Name),
+                cancellation: token);
+            return;
+        }
+
+        var cachedKey = $"download:{file.Name}";
+        var cachedFile = await _cache.GetOrCreateAsync(
+            key: cachedKey,
+            factory: async ct => await File.ReadAllBytesAsync(filePath, ct),
+            options: new HybridCacheEntryOptions 
+            { 
+                Expiration = TimeSpan.FromMinutes(4),
+                LocalCacheExpiration = TimeSpan.FromMinutes(4)
+            },
+            cancellationToken: token
+        );
+
         await SendStreamAsync(
-            stream: fileStream,
-            fileName: file.Name,
-            fileLengthBytes: fileStream.Length,
-            contentType: GetContentTypeMime(file.Name),
-            cancellation: ct);
+            stream: new MemoryStream(cachedFile), 
+            fileName: file.Name, 
+            fileLengthBytes: cachedFile.Length, 
+            cancellation: token);
     }
 
     private async Task<FileUpload?> GetFile(Guid fileId)

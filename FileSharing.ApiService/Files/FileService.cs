@@ -11,12 +11,10 @@ public class FileService : IFileService
     // TODO: Switch to dapper and use InterpolatedSql?
     
     private readonly NpgsqlDataSource _dataSource;
-    private readonly IAmazonS3 _s3;
     
-    public FileService(NpgsqlDataSource dataSource, IAmazonS3 s3)
+    public FileService(NpgsqlDataSource dataSource)
     {
         _dataSource = dataSource;
-        _s3 = s3;
     }
     
     // TODO: Do something with rows affected?
@@ -33,9 +31,7 @@ public class FileService : IFileService
         
         return file;
     }
-
-
-
+    
     public async Task<FileUpload?> GetByIdAsync(Guid id)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();

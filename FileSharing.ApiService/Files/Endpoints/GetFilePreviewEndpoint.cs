@@ -1,20 +1,20 @@
-﻿using System.Text;
+﻿using System.Net;
 using Amazon.S3;
 using Amazon.S3.Model;
 using FastEndpoints;
 using FileSharing.ApiService.Contracts.Responses;
 using FileSharing.Constants;
-using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace FileSharing.ApiService.Files.Endpoints;
 
 public class GetPreviewFileEndpoint : EndpointWithoutRequest<FilePreviewResponse>
 {
     private readonly IFileService _fileService;
-    private readonly IDistributedCache _cache;
+    private readonly HybridCache _cache;
     private readonly IAmazonS3 _s3;
 
-    public GetPreviewFileEndpoint(IFileService fileService, IDistributedCache cache, IAmazonS3 s3)
+    public GetPreviewFileEndpoint(IFileService fileService, HybridCache cache, IAmazonS3 s3)
     {
         _fileService = fileService;
         _cache = cache;
@@ -28,21 +28,21 @@ public class GetPreviewFileEndpoint : EndpointWithoutRequest<FilePreviewResponse
         AllowAnonymous();
     }
 
-    public override async Task HandleAsync(CancellationToken ct)
+    public override async Task HandleAsync(CancellationToken token)
     {
         var fileIdStr = Route<string>("fileId");
 
         if (!Guid.TryParseExact(fileIdStr, "N", out var fileId))
         {
             AddError("File not found");
-            await SendNotFoundAsync(ct);
+            await SendNotFoundAsync(token);
             return;
         }
 
         var file = await _fileService.GetByIdAsync(fileId);
         if (file is null)
         {
-            await SendNotFoundAsync(ct);
+            await SendNotFoundAsync(token);
             return;
         }
 
@@ -51,52 +51,61 @@ public class GetPreviewFileEndpoint : EndpointWithoutRequest<FilePreviewResponse
             file = await _fileService.GetByHashAsync(file.Hash);
             if (file is null)
             {
-                await SendNotFoundAsync(ct);
+                await SendNotFoundAsync(token);
                 return;
             }
         }
-        
-        var cachedBytes = await _cache.GetAsync(fileIdStr, ct);
 
-        if (cachedBytes is not null)
-        {
-            var cachedUrl = Encoding.UTF8.GetString(cachedBytes);
-            
-            await SendAsync(new FilePreviewResponse
+        var fileName = file.GetPreviewFilename();
+        
+        // TODO: Move cache to service?
+        var result = await _cache.GetOrCreateAsync<string?>(
+            key: $"preview:{fileName}",
+            factory: async ct => await PreviewFactory(fileName, ct),
+            options: new HybridCacheEntryOptions
             {
-                Link = cachedUrl
-            }, cancellation: ct);
-            return;
-        }
-        
-        var request = new GetPreSignedUrlRequest
-        {
-            BucketName = Storage.Bucket,
-            Key = file.GetPreviewFilename(),
-            Expires = DateTime.UtcNow.AddMinutes(60),
-            Verb = HttpVerb.GET
-        };
+                Expiration = TimeSpan.FromMinutes(55),
+                LocalCacheExpiration = TimeSpan.FromMinutes(55)
+            },
+            cancellationToken: token
+        );
 
-        var newUrl = await _s3.GetPreSignedURLAsync(request);
-
-        if (newUrl is null)
+        if (result is null)
         {
             AddError("r2 preview url is null.");
-            await SendErrorsAsync(StatusCodes.Status500InternalServerError, ct);
+            await SendErrorsAsync(StatusCodes.Status500InternalServerError, token);
             return;
         }
-
-        var bytes = Encoding.UTF8.GetBytes(newUrl);
-        var options = new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(55)
-        };
         
-        await _cache.SetAsync(file.GetPreviewFilename(), bytes, options, ct);
-
         await SendAsync(new FilePreviewResponse
         {
-            Link = newUrl
-        }, cancellation: ct);
+            Link = result
+        }, cancellation: token);
     }
+
+    private async Task<string?> PreviewFactory(string fileName, CancellationToken token)
+    {
+        try
+        {
+            await _s3.GetObjectMetadataAsync(new GetObjectMetadataRequest
+            {
+                BucketName = Storage.Bucket,
+                Key = fileName
+            }, token);
+     
+            var request = new GetPreSignedUrlRequest
+            {
+                BucketName = Storage.Bucket,
+                Key = fileName,
+                Expires = DateTime.UtcNow.AddMinutes(60),
+                Verb = HttpVerb.GET
+            };
+                    
+            return await _s3.GetPreSignedURLAsync(request);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    } 
 }

@@ -15,7 +15,8 @@ public static class ProjectNames
 
 public static class Limits
 {
-    public const long MaxFileSize = 1_073_741_824; // 1 GB
+    public const long MaxCachedFileSize = 20 * 1024 * 1024; // 1 GB
+    public const long MaxFileSize = 1 * 1024 * 1024 * 1024; // 1 GB
 }
 
 public static class Storage

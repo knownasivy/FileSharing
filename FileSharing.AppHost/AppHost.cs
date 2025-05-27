@@ -42,14 +42,12 @@ var db = postgres.AddDatabase(databaseName)
     .WithCreationScript(creationScript);
 
 // TODO: Maybe make persistant in the future
-var cache = builder.AddRedis(ProjectNames.Redis);
+//var cache = builder.AddRedis(ProjectNames.Redis);
 //    .WithDataVolume(isReadOnly: false);
 
 builder.AddProject<Projects.FileSharing_ApiService>(ProjectNames.ApiService)
     .WithHttpHealthCheck("/health")
     .WithReference(db)
-    .WithReference(cache)
-    .WaitFor(postgres)
-    .WaitFor(cache);
+    .WaitFor(postgres);
 
 builder.Build().Run();

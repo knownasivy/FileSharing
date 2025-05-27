@@ -62,6 +62,6 @@ public enum FileType
 public enum FileStatus
 {
     Uploading,
-    Uploaded,
-    Deleted
+    Uploaded
+    //Deleted
 }
