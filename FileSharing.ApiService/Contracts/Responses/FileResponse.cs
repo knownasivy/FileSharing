@@ -14,5 +14,5 @@ public class FileResponse
     
     public required string CreatedAt { get; set; }
     
-    public required string Hash { get; set; }
+    //public required string Hash { get; set; }
 }

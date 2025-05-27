@@ -18,18 +18,18 @@ else
 }
 
 /*
--- Create the tables
-CREATE TABLE files (
-    file_id UUID PRIMARY KEY,
-    file_name VARCHAR(255) NOT NULL,
-    file_ext VARCHAR(16) NOT NULL,
-    file_size BIGINT NOT NULL,
--- Other, Audio, Hash
-    file_type VARCHAR(32) NOT NULL,
--- Uploading, Uploaded, Deleted
-    file_status VARCHAR(32) NOT NULL,
-    created_at DATE NOT NULL,
-    file_hash VARCHAR(24)
+create table Files
+(
+    Id        uuid not null
+        constraint Files_pk
+            primary key,
+    Name      text not null,
+    Size      integer not null,
+    Type      integer not null,
+    Status    integer not null,
+    CreatedAt timestamp not null,
+    Hash      bytea not null,
+    FakeFile  boolean not null
 );
 */
 

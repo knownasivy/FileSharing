@@ -47,7 +47,6 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         
         
         var fileName = req.File.FileName;
-            
         if (string.IsNullOrWhiteSpace(fileName) || !fileName.Contains('.'))
         {
             AddError("File too large.");
@@ -61,11 +60,12 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         if (!Directory.Exists(result.GetLocation()))
             Directory.CreateDirectory(result.GetLocation());
 
-        var newFileName = $"{result.Id:N}.{result.FileExtension}";
+        var newFileName = $"{result.Id:N}.{result.Extension}";
         var filePath = Path.Combine(result.GetLocation(), newFileName);
 
-        var hasher = new XxHash3(); // No 'using' statement needed
+        var hasher = new XxHash3();
 
+        // TODO: Check if file type matches mimetype
         await using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
             var buffer = new byte[8192];
@@ -81,9 +81,8 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         }
             
         var hashBytes = hasher.GetCurrentHash();
-        var hashHex = Convert.ToHexStringLower(hashBytes);
         
-        result = await _fileService.CompleteAsync(result.Id, hashHex, filePath);
+        result = await _fileService.CompleteAsync(result.Id, hashBytes, filePath);
         if (result is null)
         {
             AddError("Impossible");
@@ -91,7 +90,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
             return;
         }
 
-        if (result.Type == UploadFile.FileType.Audio)
+        if (result.Type == FileType.Audio)
         {
             // TODO: Move to a queue?
             _ = Task.Run(async () => await ProcessAudio(result, filePath), ct);
@@ -100,7 +99,8 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         await SendAsync(result.MapToResponse(), cancellation: ct);
     }
 
-    private async Task ProcessAudio(UploadFile file, string filePath)
+    // TODO: Switch to FFMpegCore?
+    private async Task ProcessAudio(FileUpload file, string filePath)
     {
         const string cmd = "ffmpeg";
                 

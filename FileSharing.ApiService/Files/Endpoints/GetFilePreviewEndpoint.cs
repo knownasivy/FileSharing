@@ -46,7 +46,7 @@ public class GetPreviewFileEndpoint : EndpointWithoutRequest<FilePreviewResponse
             return;
         }
 
-        if (file.Type == UploadFile.FileType.Hash)
+        if (file.FakeFile)
         {
             file = await _fileService.GetByHashAsync(file.Hash);
             if (file is null)

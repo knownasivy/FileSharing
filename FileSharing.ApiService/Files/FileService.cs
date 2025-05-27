@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using Amazon.S3;
+using Dapper;
 using Npgsql;
 
 namespace FileSharing.ApiService.Files;
@@ -16,217 +17,104 @@ public class FileService : IFileService
         _dataSource = dataSource;
         _s3 = s3;
     }
-
-    public async Task<UploadFile> CreateAsync(UploadFile file)
+    
+    // TODO: Do something with rows affected?
+    public async Task<FileUpload> CreateAsync(FileUpload file)
     {
-        const string sql = """
-                           INSERT INTO files (file_id, 
-                                              file_name,
-                                              file_ext,
-                                              file_size, 
-                                              file_type, 
-                                              file_status, 
-                                              created_at,
-                                              file_hash)
-                           VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)
-                           """;
+        // TODO: Validation?
         
         await using var connection = await _dataSource.OpenConnectionAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.Add(new NpgsqlParameter("p1", file.Id));
-        command.Parameters.Add(new NpgsqlParameter("p2", file.Name));
-        command.Parameters.Add(new NpgsqlParameter("p3", file.FileExtension));
-        command.Parameters.Add(new NpgsqlParameter("p4", file.Size));
-        command.Parameters.Add(new NpgsqlParameter("p5", file.Type.ToString()));
-        command.Parameters.Add(new NpgsqlParameter("p6", file.Status.ToString()));
-        command.Parameters.Add(new NpgsqlParameter("p7", file.CreatedAt));
-        command.Parameters.Add(new NpgsqlParameter("p8", string.Empty));
-
-        await using var rowsAffected = await command.ExecuteReaderAsync();
-        // TODO: Check rowsAffected amount? 
+        await connection.ExecuteAsync(
+            """
+            insert into files (id, name, size, type, status, createdat, hash, fakefile)
+            values (@Id, @Name, @Size, @Type, @Status, @CreatedAt, @Hash, @FakeFile)
+            """, file);
         
         return file;
     }
 
-    public async Task<UploadFile?> CompleteAsync(Guid id, string hash, string filePath)
+
+
+    public async Task<FileUpload?> GetByIdAsync(Guid id)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        await using var tx = await connection.BeginTransactionAsync();
+        var file = await connection.QueryFirstOrDefaultAsync<FileUpload>(
+            "select * from files where id=@id limit 1", new { id });
+        return file;
+    }
 
-        const string updateSql = """
-                                 UPDATE files
-                                 SET file_status = @p1
-                                 WHERE file_id   = @p2
-                                 """;
+    public async Task<FileUpload?> GetByHashAsync(byte[] hash)
+    {
 
-        await using (var command = new NpgsqlCommand(updateSql, connection, tx))
+        await using var connection = await _dataSource.OpenConnectionAsync();
+        var file = await connection.QueryFirstOrDefaultAsync<FileUpload>(
+            "select * from files where hash=@hash and fakefile = false limit 1", new { hash });
+        return file;
+    }
+    
+    public async Task<IEnumerable<FileUpload>> GetAllAsync()
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync();
+        return await connection.QueryAsync<FileUpload>("select * from files");
+    }
+
+    // TODO: Do something with rows affected?
+    public async Task<FileUpload?> CompleteAsync(Guid id, byte[] hash, string filePath)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync();
+        
+        var existingFile = GetByIdAsync(id);
+        var existingHashFile = GetByHashAsync(hash);
+        await Task.WhenAll(existingFile, existingHashFile);
+        
+        if (existingFile.Result is null)
         {
-            command.Parameters.Add(new("p1", nameof(UploadFile.FileStatus.Uploaded)));
-            command.Parameters.Add(new("p2", id));
-
-            await command.ExecuteNonQueryAsync();
+            return null;
+            // TODO: I think result pattern returns: default(FileUpload?);
         }
         
-        var existing = await GetByHashAsync(hash);
+        var file = existingFile.Result;
+        
+        file.Hash = hash;
+        file.Status = FileStatus.Uploaded;
+        file.FakeFile = existingHashFile.Result is not null;
+        
+        await connection.ExecuteAsync(
+            """
+            update files
+            set status=@Status,
+                hash=@Hash,
+                fakefile=@FakeFile
+            where id=@Id
+            """, file);
 
-        if (existing is not null && existing.Id != id)
+        if (file.FakeFile && File.Exists(filePath))
         {
-            const string typeSql = """
-                                   UPDATE files
-                                   SET file_type = @p1,
-                                       file_hash = @p2
-                                   WHERE file_id = @p3
-                                   """;
-            await using var command = new NpgsqlCommand(typeSql, connection, tx);
-            command.Parameters.Add(new("p1", nameof(UploadFile.FileType.Hash)));
-            command.Parameters.Add(new("p2", hash));
-            command.Parameters.Add(new("p3", id));
-            
-            await command.ExecuteNonQueryAsync();
-            
             File.Delete(filePath);
         }
-        else
-        {
-            const string hashSql = """
-                                   UPDATE files
-                                   SET file_hash = @p1
-                                   WHERE file_id = @p2
-                                   """;
-            await using var command = new NpgsqlCommand(hashSql, connection, tx);
-            command.Parameters.Add(new("p1", hash));
-            command.Parameters.Add(new("p2", id));
-            
-            await command.ExecuteNonQueryAsync();
-        }
 
-        await tx.CommitAsync();
-        
-        return await GetByIdAsync(id);
+        return file;
     }
-
-    public async Task<UploadFile?> GetByIdAsync(Guid id)
+    
+    public async Task<bool> DeleteByIdAsync(Guid id)
     {
-        const string sql = """
-                           SELECT *
-                           FROM files
-                           WHERE file_id = @p1
-                           """;
-        
         await using var connection = await _dataSource.OpenConnectionAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.Add(new NpgsqlParameter("p1", id));
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-        {
-            Console.WriteLine("No file found somehow.");
-            return null;
-        }
-        
-        /*
-            file_id UUID PRIMARY KEY,
-            file_name VARCHAR(255) NOT NULL,
-            file_size BIGINT NOT NULL,
-            file_type file_type_enum NOT NULL,
-            file_status file_status_enum NOT NULL,
-            created_at DATE NOT NULL
-        */
-        
-        var type = Enum.Parse<UploadFile.FileType>(reader.GetString(4));
-        var status = Enum.Parse<UploadFile.FileStatus>(reader.GetString(5));
-
-        return new UploadFile
-        {
-            Id = reader.GetGuid(0),
-            Name = reader.GetString(1),
-            FileExtension = reader.GetString(2),
-            Size = reader.GetInt64(3),
-            Type = type,
-            Status = status,
-            CreatedAt = reader.GetDateTime(6),
-            Hash = reader.GetString(7)
-        };
-    }
-
-    public async Task<UploadFile?> GetByHashAsync(string hash)
-    {
-        const string sql = """
-                           SELECT *
-                           FROM files
-                           WHERE file_hash = @p1
-                             AND file_type != 'Hash';
-                           """;
-        
-        await using var connection = await _dataSource.OpenConnectionAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.Add(new NpgsqlParameter("p1", hash));
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-            return null;
-        
-        /*
-            file_id UUID PRIMARY KEY,
-            file_name VARCHAR(255) NOT NULL,
-            file_size BIGINT NOT NULL,
-            file_type file_type_enum NOT NULL,
-            file_status file_status_enum NOT NULL,
-            created_at DATE NOT NULL
-        */
-        
-        var type = Enum.Parse<UploadFile.FileType>(reader.GetString(4));
-        var status = Enum.Parse<UploadFile.FileStatus>(reader.GetString(5));
-
-        return new UploadFile
-        {
-            Id = reader.GetGuid(0),
-            Name = reader.GetString(1),
-            FileExtension = reader.GetString(2),
-            Size = reader.GetInt64(3),
-            Type = type,
-            Status = status,
-            CreatedAt = reader.GetDateTime(6),
-            Hash = reader.GetString(7)
-        };
-    }
-
-    // TODO: For deduplication?
-    /*public async Task<bool> ExistsBySizeAsync(long size)
-    {
-        const string sql = """
-                           SELECT file_id
-                           FROM files
-                           WHERE file_size = @p1
-                           LIMIT 1
-                           """;
-        
-        await using var connection = await _dataSource.OpenConnectionAsync();
-        await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.Add(new NpgsqlParameter("p1", size));
-
-        await using var reader = await command.ExecuteReaderAsync();
-        
-        return await reader.ReadAsync();
-    }*/
-
-    public Task<bool> DeleteByIdAsync(Guid id)
-    {
-        throw new NotImplementedException();
+        var result = await connection.ExecuteAsync("delete from files where id = @id", new { id });
+        return result > 0;
     }
 }
 
 public interface IFileService
 {
-    Task<UploadFile> CreateAsync(UploadFile uploadFile);
+    Task<FileUpload> CreateAsync(FileUpload fileUpload);
     
-    Task<UploadFile?> CompleteAsync(Guid id, string hash, string filePath);
+    Task<FileUpload?> GetByIdAsync(Guid id);
     
-    Task<UploadFile?> GetByIdAsync(Guid id);
+    Task<FileUpload?> GetByHashAsync(byte[] hash);
+
+    Task<IEnumerable<FileUpload>> GetAllAsync(); // TODO: Filter?
     
-    Task<UploadFile?> GetByHashAsync(string hash);
-    
-    //Task<bool> ExistsBySizeAsync(long size);
+    Task<FileUpload?> CompleteAsync(Guid id, byte[] hash, string filePath);
     
     Task<bool> DeleteByIdAsync(Guid id);
 }

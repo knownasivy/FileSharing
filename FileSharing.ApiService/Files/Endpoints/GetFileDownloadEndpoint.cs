@@ -35,7 +35,7 @@ public class GetFileDownloadEndpoint : EndpointWithoutRequest
             return;
         }
         
-        var newFileName = $"{file.Id:N}.{file.FileExtension}";
+        var newFileName = $"{file.Id:N}.{file.Extension}";
         var filePath = Path.Combine(file.GetLocation(), newFileName);
         
         if (!File.Exists(filePath))
@@ -55,7 +55,7 @@ public class GetFileDownloadEndpoint : EndpointWithoutRequest
             cancellation: ct);
     }
 
-    private async Task<UploadFile?> GetFile(Guid fileId)
+    private async Task<FileUpload?> GetFile(Guid fileId)
     {
         var file = await _fileService.GetByIdAsync(fileId);
         if (file is null)
@@ -64,7 +64,7 @@ public class GetFileDownloadEndpoint : EndpointWithoutRequest
             return file;
         }
 
-        if (file.Type != UploadFile.FileType.Hash)
+        if (!file.FakeFile)
         {
             return file;
         }
