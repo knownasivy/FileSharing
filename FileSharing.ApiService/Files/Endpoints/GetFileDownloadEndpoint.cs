@@ -50,6 +50,7 @@ public class GetFileDownloadEndpoint : EndpointWithoutRequest
             return;
         }
         
+        // TODO: Max cache per ip
         if (fileInfo.Length > Limits.MaxCachedFileSize)
         {
             await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
@@ -62,15 +63,15 @@ public class GetFileDownloadEndpoint : EndpointWithoutRequest
                 cancellation: token);
             return;
         }
-
+        
         var cachedKey = $"download:{file.Name}";
         var cachedFile = await _cache.GetOrCreateAsync(
             key: cachedKey,
             factory: async ct => await File.ReadAllBytesAsync(filePath, ct),
             options: new HybridCacheEntryOptions 
             { 
-                Expiration = TimeSpan.FromMinutes(4),
-                LocalCacheExpiration = TimeSpan.FromMinutes(4)
+                Expiration = TimeSpan.FromMinutes(3),
+                LocalCacheExpiration = TimeSpan.FromMinutes(3)
             },
             cancellationToken: token
         );

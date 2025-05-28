@@ -42,7 +42,7 @@ public class FileService : IFileService
     public async Task<FileUpload?> GetByHashAsync(byte[] hash)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        var query = connection.SqlBuilder($"SELECT * FROM files WHERE Hash = {hash} AND FakeFile = False LIMIT 1");
+        var query = connection.SqlBuilder($"SELECT * FROM files WHERE Hash = {hash} AND FakeFile = false LIMIT 1");
         return await query.QueryFirstOrDefaultAsync<FileUpload>();
     }
     

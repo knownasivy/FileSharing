@@ -2,7 +2,9 @@ using FastEndpoints;
 using FastEndpoints.Swagger;
 using FileSharing.ApiService;
 using FileSharing.ApiService.Files;
+using FileSharing.ApiService.Middleware;
 using FileSharing.Constants;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +12,17 @@ var builder = WebApplication.CreateBuilder(args);
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
 builder.AddNpgsqlDataSource(ProjectNames.GetConnectionString(builder.Environment.IsDevelopment()));
+
+if (builder.Environment.IsProduction())
+{
+    // For nginx
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownNetworks.Clear(); // Allow all networks
+        options.KnownProxies.Clear();  // Allow all proxies
+    });
+}
 
 builder.Services.AddHybridCache(options =>
 {
@@ -72,6 +85,13 @@ if (app.Environment.IsDevelopment())
         c.Path = "/swagger/v1/swagger.json";
     });
 }
+
+if (app.Environment.IsProduction())
+{
+    app.UseForwardedHeaders();
+}
+
+app.UseMiddleware<Protection>();
 
 app.UseCors();
 app.Run();

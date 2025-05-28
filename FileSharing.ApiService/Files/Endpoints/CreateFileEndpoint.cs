@@ -1,8 +1,10 @@
 ﻿using System.Diagnostics;
 using System.IO.Hashing;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using FastEndpoints;
+using FFMpegCore;
 using FileSharing.ApiService.Contracts;
 using FileSharing.ApiService.Contracts.Requests;
 using FileSharing.ApiService.Contracts.Responses;
@@ -33,6 +35,8 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
 
     public override async Task HandleAsync(CreateFileRequest req, CancellationToken ct)
     {
+        // TODO: Have i protected myself against the stampede threat? 
+        
         switch (req.File.Length)
         {
             case 0:
@@ -45,16 +49,22 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
                 return;
         }
         
-        
         var fileName = req.File.FileName;
         if (string.IsNullOrWhiteSpace(fileName) || !fileName.Contains('.'))
         {
-            AddError("File too large.");
+            AddError("Unsupported file format.");
             await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
             return;
         }
         
         var file = req.MapToFile();
+        if (file.Type == FileType.Unknown)
+        {
+            AddError("Unsupported file format.");
+            await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
+            return;
+        }
+        
         var result = await _fileService.CreateAsync(file);
             
         if (!Directory.Exists(result.GetLocation()))
@@ -68,11 +78,10 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         // TODO: Check if file type matches mimetype
         await using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            var buffer = new byte[8192];
+            var buffer = new byte[Rates.Chunks];
             int bytesRead;
-
+            
             await using var inputStream = req.File.OpenReadStream();
-
             while ((bytesRead = await inputStream.ReadAsync(buffer, ct)) > 0)
             {
                 await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
@@ -83,69 +92,90 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         var hashBytes = hasher.GetCurrentHash();
         
         result = await _fileService.CompleteAsync(result.Id, hashBytes, filePath);
-        if (result is null)
+        switch (result)
         {
-            AddError("Impossible");
-            await SendErrorsAsync(StatusCodes.Status500InternalServerError, ct);
-            return;
-        }
-
-        if (result.Type == FileType.Audio)
-        {
-            // TODO: Move to a queue?
-            _ = Task.Run(async () => await ProcessAudio(result, filePath), ct);
+            case null:
+                AddError("Impossible");
+                await SendErrorsAsync(StatusCodes.Status500InternalServerError, ct);
+                return;
+            case { FakeFile: false, Type: FileType.Audio }:
+                // TODO: Move to a queue?
+                _ = Task.Run(async () => await ProcessAudio(result, filePath), ct);
+                break;
         }
 
         await SendAsync(result.MapToResponse(), cancellation: ct);
     }
 
+    private static async Task<string> ConvertToAudioPreviewFileAsync(string inputFilePath)
+    {
+        // Generate a unique temporary file path for the preview
+        var tempPreviewPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.m4a");
+
+        await FFMpegArguments
+            .FromFileInput(inputFilePath)
+            .OutputToFile(tempPreviewPath, overwrite: true, options => options
+                    .WithAudioCodec("aac")
+                    .WithAudioBitrate(80)
+                    .ForceFormat("ipod")
+                    .WithCustomArgument("-vn") // Disable video
+                    .WithCustomArgument("-map_metadata")
+                    .WithCustomArgument("-1")  // Remove metadata
+            )
+            .ProcessAsynchronously();
+
+        return tempPreviewPath;
+    }
+
     // TODO: Switch to FFMpegCore?
     private async Task ProcessAudio(FileUpload file, string filePath)
     {
-        const string cmd = "ffmpeg";
-                
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
+        
+        /*
+         * TODO:
+         * 1. Make sure audio isnt too long
+         * 2. Make sure it has one audio stream
+         * 3. Extract metadata
+         */
+        
+        _logger.LogInformation("Processing audio file...");
+        
         var previewFileName = $"{file.Id:N}_prev.m4a";
-        var outputPath = Path.Combine(file.GetLocation(), previewFileName);
-                
-        var args = $"-i \"{filePath}\" -map_metadata -1 -vn -c:a aac -b:a 84k \"{outputPath}\" -y";
-                
-        var processStartInfo = new ProcessStartInfo
-        {
-            FileName = cmd,
-            Arguments = args,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var tmpFile = await ConvertToAudioPreviewFileAsync(filePath);
 
-        using var process = new Process();
-        process.StartInfo = processStartInfo;
-        process.Start();
-                
-        var errorOutput = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-
-        if (process.ExitCode != 0)
+        try
         {
-            _logger.LogError("FFmpeg cmd: {Ffmpeg} {Args}", cmd, args);
-            _logger.LogError("FFmpeg error: {ErrorOutput}", errorOutput);
-            return;
+            var request = new PutObjectRequest
+            {
+                BucketName = "files",
+                Key = previewFileName,
+                FilePath = tmpFile,
+                DisablePayloadSigning = true
+            };
+
+            if (!File.Exists(tmpFile) || new FileInfo(tmpFile).Length > file.Size)
+            {
+                request.InputStream = File.Open(filePath, FileMode.Open, FileAccess.Read);
+            }
+
+            await _s3.PutObjectAsync(request);
         }
-
-        var size = new FileInfo(outputPath).Length;
-
-        var uploadFile = size > file.Size ? filePath : outputPath;
-        
-        await using var fileStream = File.Open(uploadFile, FileMode.Open, FileAccess.Read);
-        var request = new PutObjectRequest
+        catch (AmazonS3Exception ex)
         {
-            BucketName = "files",
-            Key = previewFileName,
-            InputStream = fileStream,
-            DisablePayloadSigning = true
-        };
+            _logger.LogError(ex, "Error uploading file to r2");
+        }
+        finally
+        {
+            if (File.Exists(tmpFile))
+            {
+                File.Delete(tmpFile);
+                _logger.LogInformation("Deleted temp file: {TmpFile}", tmpFile);
+            }
+        }
         
-        await _s3.PutObjectAsync(request);
-        File.Delete(outputPath);
+        stopwatch.Stop();
+        _logger.LogInformation("ProcessAudio took {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
     }
 }
