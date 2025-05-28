@@ -38,8 +38,6 @@ void GetAudioImage(AudioFileInfo? fileInfo)
             o.WithCustomArgument("-vcodec copy");
         })
         .ProcessSynchronously();
-    
-    
 }
 
 async Task<AudioFileInfo?> GetAudioInfo(string fileName)

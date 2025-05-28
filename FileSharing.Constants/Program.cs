@@ -16,6 +16,7 @@ public static class ProjectNames
 
 public static class Storage
 {
+    public static TimeSpan MaxFileDuration = TimeSpan.FromMinutes(45);
     public const string Bucket = "files";
     public const int BufferSize = 80 * 1024; // 80 KB per second
     public const long MaxCachedFileSize = 15L * 1024 * 1024; // 20 MB

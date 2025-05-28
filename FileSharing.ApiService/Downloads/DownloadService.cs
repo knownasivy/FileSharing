@@ -52,7 +52,7 @@ public class DownloadService : IDownloadService
                 {
                     throw new FileNotFoundException(filePath);
                 }
-                // If it becomes an issue don't read all at once
+                // TODO: I think this would be better as a stream
                 return await File.ReadAllBytesAsync(filePath);
             });
         

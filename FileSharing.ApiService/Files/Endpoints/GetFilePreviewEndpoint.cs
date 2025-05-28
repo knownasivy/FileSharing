@@ -55,8 +55,6 @@ public class GetPreviewFileEndpoint : EndpointWithoutRequest<FilePreviewResponse
                 return;
             }
         }
-
-
         
         var fileName = file.GetPreviewFilename();
         
