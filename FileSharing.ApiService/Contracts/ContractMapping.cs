@@ -1,4 +1,5 @@
-﻿using FileSharing.ApiService.Contracts.Requests;
+﻿using System.Net;
+using FileSharing.ApiService.Contracts.Requests;
 using FileSharing.ApiService.Contracts.Responses;
 using FileSharing.ApiService.Files;
 using FileSharing.ApiService.Util;
@@ -7,18 +8,17 @@ namespace FileSharing.ApiService.Contracts;
 
 public static class ContractMapping
 {
-    public static FileUpload MapToFile(this CreateFileRequest request)
+    public static FileUpload MapToFile(this CreateFileRequest request, string ipAddress)
     {
-        var fileName = request.File.FileName;
-        
         // TODO: Check file type matches actual filetype
         return new FileUpload
         {
             Id = Guid.NewGuid(),
-            Name = fileName,
+            Name = request.File.FileName,
             Size = (int)request.File.Length, // TODO: I think int is fine?
-            Type = FileUtil.GetFileType(fileName),
-            FakeFile = false
+            Type = FileUtil.GetFileType(request.File.FileName),
+            FakeFile = false,
+            IpAddress = ipAddress
         };
     }
 

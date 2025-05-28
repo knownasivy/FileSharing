@@ -1,4 +1,5 @@
 ﻿using FileSharing.ApiService.Files;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace FileSharing.ApiService.Util;
 
@@ -43,5 +44,16 @@ public static class FileUtil
     public static FileType GetFileType(this FileUpload fileUpload)
     {
         return GetFileType(fileUpload.Name);        
+    }
+    
+    public static string GetContentTypeMime(string fileName)
+    {
+        var provider = new FileExtensionContentTypeProvider();
+        if (!provider.TryGetContentType(fileName, out var contentType))
+        {
+            contentType = "application/octet-stream"; // Default MIME type if unknown
+        }
+
+        return contentType;
     }
 }

@@ -11,11 +11,6 @@ if (builder.Environment.IsDevelopment())
 {
     postgres.WithPgAdmin();
 }
-else
-{
-    // TODO: Do i do this?
-    // postgres.WithPgWeb();
-}
 
 /*
 create table Files
@@ -29,7 +24,8 @@ create table Files
     Status    integer not null,
     CreatedAt timestamp not null,
     Hash      bytea not null,
-    FakeFile  boolean not null
+    FakeFile  boolean not null,
+    IPAddress text not null
 );
 */
 

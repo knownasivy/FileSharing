@@ -1,4 +1,5 @@
-﻿using FileSharing.ApiService.Util;
+﻿using System.Net;
+using FileSharing.ApiService.Util;
 using ZLinq;
 
 namespace FileSharing.ApiService.Files;
@@ -23,6 +24,8 @@ public class FileUpload
     public byte[] Hash { get; set; } = [];
     
     public required bool FakeFile { get; set; }
+    
+    public required string IpAddress { get; init; }
 
     public string CreatedFormated => 
         CreatedAt.ToString("MM-dd-yy");
@@ -56,6 +59,7 @@ public enum FileType
 {
     Audio,
     Archive,
+    Image,
     Unknown
 }
 

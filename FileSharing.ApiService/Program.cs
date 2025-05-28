@@ -1,6 +1,7 @@
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using FileSharing.ApiService;
+using FileSharing.ApiService.Downloads;
 using FileSharing.ApiService.Files;
 using FileSharing.ApiService.Middleware;
 using FileSharing.Constants;
@@ -24,12 +25,12 @@ if (builder.Environment.IsProduction())
     });
 }
 
-builder.Services.AddHybridCache(options =>
+builder.Services.AddMemoryCache(o =>
 {
-    options.MaximumPayloadBytes = Limits.MaxCachedFileSize; // 20 MB
-    options.MaximumKeyLength = 512;
-    options.DisableCompression = true;
+    o.SizeLimit = Storage.MaxMemCacheSize;
 });
+
+builder.Services.AddHybridCache();
 
 var bfp = builder.Services.AddFastEndpoints();
 
@@ -64,9 +65,11 @@ builder.Services.AddSingleton(R2Service.GetR2Config(new R2Config
 
 builder.Services.AddSingleton<IFileService, FileService>();
 
+builder.Services.AddSingleton<IDownloadService, DownloadService>();
+
 builder.Services.Configure<KestrelServerOptions>(options =>
 {
-    options.Limits.MaxRequestBodySize = Limits.MaxFileSize;
+    options.Limits.MaxRequestBodySize = Storage.MaxFileSize;
 });
 
 builder.Services.AddProblemDetails();

@@ -43,7 +43,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
                 AddError("One file must be provided.");
                 await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
                 return;
-            case > Limits.MaxFileSize:
+            case > Storage.MaxFileSize:
                 AddError("File too large.");
                 await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
                 return;
@@ -57,7 +57,14 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
             return;
         }
         
-        var file = req.MapToFile();
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (ipAddress is null)
+        {
+            _logger.LogError("Unable to get ip address for {FileName}.", fileName);
+            ipAddress = "127.0.0.1";
+        }
+        
+        var file = req.MapToFile(ipAddress);
         if (file.Type == FileType.Unknown)
         {
             AddError("Unsupported file format.");
@@ -78,7 +85,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         // TODO: Check if file type matches mimetype
         await using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            var buffer = new byte[Rates.Chunks];
+            var buffer = new byte[Storage.BufferSize];
             int bytesRead;
             
             await using var inputStream = req.File.OpenReadStream();

@@ -25,8 +25,8 @@ public class FileService : IFileService
         await using var connection = await _dataSource.OpenConnectionAsync();
         await connection.ExecuteAsync(
             """
-            INSERT INTO files (Id, Name, Size, Type, Status, CreatedAt, Hash, FakeFile)
-            VALUES (@Id, @Name, @Size, @Type, @Status, @CreatedAt, @Hash, @FakeFile)
+            INSERT INTO files (Id, Name, Size, Type, Status, CreatedAt, Hash, FakeFile, IPAddress)
+            VALUES (@Id, @Name, @Size, @Type, @Status, @CreatedAt, @Hash, @FakeFile, @IPAddress)
             """, file);
         
         return file;

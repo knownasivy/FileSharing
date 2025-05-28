@@ -1,4 +1,6 @@
-﻿namespace FileSharing.ApiService.Middleware;
+﻿using FileSharing.Constants;
+
+namespace FileSharing.ApiService.Middleware;
 
 public class Protection
 {
@@ -17,17 +19,22 @@ public class Protection
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (_env.IsProduction())
+        if (_env.IsDevelopment())
         {
-            // TODO: CRSF?
             if (!context.Request.Headers.ContainsKey("X-Forwarded-For"))
             {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsync("Forbidden");
-                return;
+                context.Request.Headers["X-Forwarded-For"] = Misc.DefaultIp;
             }
         }
-
+        
+        // TODO: CRSF?
+        if (!context.Request.Headers.ContainsKey("X-Forwarded-For"))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsync("Forbidden");
+            return;
+        }
+        
         await _next(context);
     }
 }

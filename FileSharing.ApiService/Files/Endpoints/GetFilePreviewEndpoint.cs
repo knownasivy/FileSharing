@@ -56,6 +56,8 @@ public class GetPreviewFileEndpoint : EndpointWithoutRequest<FilePreviewResponse
             }
         }
 
+
+        
         var fileName = file.GetPreviewFilename();
         
         // TODO: Move cache to service?
