@@ -130,9 +130,6 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
     // TODO: Switch to FFMpegCore?
     private async Task ProcessAudio(FileUpload file, string filePath)
     {
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
-        
         /*
          * TODO:
          * 1. Make sure audio isnt too long
@@ -140,7 +137,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
          * 3. Extract metadata
          */
         
-        _logger.LogInformation("Processing audio file...");
+        //_logger.LogInformation("Processing audio file...");
         
         var previewFileName = $"{file.Id:N}_prev.m4a";
         var tmpFile = await ConvertToAudioPreviewFileAsync(filePath);
@@ -174,8 +171,5 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
                 _logger.LogInformation("Deleted temp file: {TmpFile}", tmpFile);
             }
         }
-        
-        stopwatch.Stop();
-        _logger.LogInformation("ProcessAudio took {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
     }
 }
