@@ -7,3 +7,4 @@ riderModule.iml
 .idea/
 FileSharing.sln.DotSettings.user
 FileSharing.ApiService/appsettings.json
+FileSharing.AppHost/appsettings.json
