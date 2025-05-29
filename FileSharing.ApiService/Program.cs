@@ -1,8 +1,11 @@
+using Dapper;
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using FileSharing.ApiService;
+using FileSharing.ApiService.Dapper;
 using FileSharing.ApiService.Downloads;
 using FileSharing.ApiService.Files;
+using FileSharing.ApiService.Metadata;
 using FileSharing.ApiService.Middleware;
 using FileSharing.Constants;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -63,9 +66,13 @@ builder.Services.AddSingleton(R2Service.GetR2Config(new R2Config
     AccountId = builder.Configuration["R2:AccountId"] ?? ""
 }));
 
-builder.Services.AddSingleton<IFileService, FileService>();
+SqlMapper.AddTypeHandler(new JsonbTypeHandler<List<string>>());
 
+builder.Services.AddSingleton<IFileService, FileService>();
+builder.Services.AddSingleton<IMetadataService, MetadataService>();
 builder.Services.AddSingleton<IDownloadService, DownloadService>();
+builder.Services.AddSingleton<IMetadataTaskQueue, MetadataTaskQueue>();
+builder.Services.AddHostedService<MetadataTaskProcessor>();
 
 builder.Services.Configure<KestrelServerOptions>(options =>
 {

@@ -43,9 +43,15 @@ public class FileUpload
     // TODO: Might be able to use more than one place
     public string GetPreviewFilename()
     {
-        if (FakeFile)
-            throw new Exception("Impossible");
-        return $"{Id:N}_prev.m4a";
+        if (FakeFile) throw new Exception("Fake file doesnt have preview");
+        
+        return Type switch
+        {
+            FileType.Audio => $"{Id:N}_prev.m4a",
+            FileType.Image => $"{Id:N}_img.webp",
+            _ => throw new Exception("Impossible")
+        };
+
     }
 
     public bool HashEquals(byte[] hash) => 

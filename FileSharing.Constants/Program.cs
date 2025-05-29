@@ -22,10 +22,10 @@ public static class Storage
     public const long MaxCachedFileSize = 15L * 1024 * 1024; // 20 MB
     public const long MaxMemCacheSize = 2L * 1024 * 1024 * 1024; // 2 GB
     public const long MaxFileSize = 1L * 1024 * 1024 * 1024; // 1 GB
-
 }
 
 public static class Misc
 {
     public const string DefaultIp = "127.0.0.1";
+    public const int MetadataTaskCapacity = 30;
 }

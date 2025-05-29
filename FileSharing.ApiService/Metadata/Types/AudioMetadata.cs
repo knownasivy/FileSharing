@@ -5,33 +5,41 @@ using FileSharing.ApiService.Files;
 using FileSharing.Constants;
 using ZLinq;
 
-namespace FileSharing.ApiService.Metadata;
+namespace FileSharing.ApiService.Metadata.Types;
 
 public class AudioMetadata : IMetadata
 {
-    public string? Title { get; set; }
-    public string? Album { get; set; }
-    public string? Artist { get; set; }
-    public TimeSpan Duration { get; init; }
+    public Guid FileId { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Album { get; set; } = string.Empty;
+    public string Artist { get; set; } = string.Empty;
+    private string? AlbumArtist { get; set; }
     public bool AttachedPic { get; set; }
+    private TimeSpan Duration { get; set; } = TimeSpan.Zero;
     
     private static readonly HashSet<string> KeysToKeep = ["title", "artist", "album", "album_artist"];
     
     public async Task<IMetadata?> ProcessAsync(FileUpload file, string filePath, IAmazonS3? s3)
     {
-        if (s3 == null) return null;
-        if (file.Status == FileStatus.Uploading) throw new Exception("Impossible");
+        if (s3 is null)
+        {
+            Console.WriteLine("s3 is null");
+            return null;
+        }
+        if (file.Type != FileType.Audio) throw new Exception("Impossible");
         
         var mediaInfo = await FFProbe.AnalyseAsync(filePath);
 
-        if (mediaInfo.Duration <= Storage.MaxFileDuration 
-            && mediaInfo.ErrorData.Count == 0)
+        Duration = mediaInfo.Duration;
+        FileId = file.Id;
+        
+        if (Duration > Storage.MaxFileDuration 
+            || mediaInfo.ErrorData.Count != 0)
         {
             return null;
         }
         
         // TODO: Test this against files with more than one audio stream
-        
         var videoStream = mediaInfo.PrimaryVideoStream;
         if (videoStream?.Disposition is not null)
         {
@@ -55,13 +63,18 @@ public class AudioMetadata : IMetadata
                     ["title"] = () => Title = kv.Value,
                     ["artist"] = () => Artist = kv.Value,
                     ["album"] = () => Album = kv.Value,
-                    ["album_artist"] = () => Artist ??= kv.Value
+                    ["album_artist"] = () => AlbumArtist = kv.Value
                 };
 
                 if (!actions.TryGetValue(kv.Key, out var action)) 
                     throw new Exception("Impossible");
         
                 action();
+            }
+            
+            if (Artist.Equals("") && AlbumArtist is not null)
+            {
+                Artist = AlbumArtist;
             }
         }
         
@@ -84,6 +97,7 @@ public class AudioMetadata : IMetadata
             {
                 BucketName = Storage.Bucket,
                 Key = previewFileName,
+                ContentType = "audio/mp4",
                 DisablePayloadSigning = true
             };
 
@@ -116,6 +130,7 @@ public class AudioMetadata : IMetadata
                         BucketName = Storage.Bucket,
                         Key = coverFileName,
                         FilePath = coverFile,
+                        ContentType = "image/webp",
                         DisablePayloadSigning = true
                     };
                 
@@ -179,9 +194,7 @@ public class AudioMetadata : IMetadata
                 o.WithVideoCodec("libwebp");
                 o.ForcePixelFormat("yuva420p");
                 o.WithFrameOutputCount(1);
-                o.WithCustomArgument("-an")
-                    .WithCustomArgument("-vcodec")
-                    .WithCustomArgument("copy");
+                o.WithCustomArgument("-an");
             })
             .ProcessAsynchronously();
         

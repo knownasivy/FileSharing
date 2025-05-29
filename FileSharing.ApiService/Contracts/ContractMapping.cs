@@ -2,6 +2,8 @@
 using FileSharing.ApiService.Contracts.Requests;
 using FileSharing.ApiService.Contracts.Responses;
 using FileSharing.ApiService.Files;
+using FileSharing.ApiService.Metadata;
+using FileSharing.ApiService.Metadata.Types;
 using FileSharing.ApiService.Util;
 
 namespace FileSharing.ApiService.Contracts;
@@ -33,6 +35,17 @@ public static class ContractMapping
             Status = file.Status.ToString(),
             CreatedAt = file.CreatedFormated
             //Hash = file.Hash
+        };
+    }
+    
+    public static MetadataResponse MapToResponse(this IMetadata metadata)
+    {
+        return metadata switch
+        {
+            AudioMetadata audio => new MetadataResponse { AudioMetadata = audio },
+            ArchiveMetadata archive => new MetadataResponse { ArchiveMetadata = archive },
+            ImageMetadata image => new MetadataResponse { ImageMetadata = image },
+            _ => throw new Exception("Impossible")
         };
     }
 }

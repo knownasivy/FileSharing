@@ -8,8 +8,6 @@ namespace FileSharing.ApiService.Files;
 
 public class FileService : IFileService
 {
-    // TODO: Switch to dapper and use InterpolatedSql?
-    
     private readonly NpgsqlDataSource _dataSource;
     
     public FileService(NpgsqlDataSource dataSource)
@@ -25,7 +23,7 @@ public class FileService : IFileService
         await using var connection = await _dataSource.OpenConnectionAsync();
         await connection.ExecuteAsync(
             """
-            INSERT INTO files (Id, Name, Size, Type, Status, CreatedAt, Hash, FakeFile, IPAddress)
+            INSERT INTO Files (Id, Name, Size, Type, Status, CreatedAt, Hash, FakeFile, IPAddress)
             VALUES (@Id, @Name, @Size, @Type, @Status, @CreatedAt, @Hash, @FakeFile, @IPAddress)
             """, file);
         
@@ -35,21 +33,21 @@ public class FileService : IFileService
     public async Task<FileUpload?> GetByIdAsync(Guid id)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        var query = connection.SqlBuilder($"SELECT * FROM files WHERE id = {id} LIMIT 1");
+        var query = connection.SqlBuilder($"SELECT * FROM Files WHERE Id = {id} LIMIT 1");
         return await query.QueryFirstOrDefaultAsync<FileUpload>();
     }
 
     public async Task<FileUpload?> GetByHashAsync(byte[] hash)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        var query = connection.SqlBuilder($"SELECT * FROM files WHERE Hash = {hash} AND FakeFile = false LIMIT 1");
+        var query = connection.SqlBuilder($"SELECT * FROM Files WHERE Hash = {hash} AND FakeFile = false LIMIT 1");
         return await query.QueryFirstOrDefaultAsync<FileUpload>();
     }
     
     public async Task<IEnumerable<FileUpload>> GetAllAsync()
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        return await connection.QueryAsync<FileUpload>("SELECT * FROM files");
+        return await connection.QueryAsync<FileUpload>("SELECT * FROM Files");
     }
 
     // TODO: Do something with rows affected?
@@ -75,7 +73,7 @@ public class FileService : IFileService
         
         await connection.ExecuteAsync(
             """
-            UPDATE files
+            UPDATE Files
             SET Status   = @Status,
                 Hash     = @Hash,
                 FakeFile = @FakeFile
@@ -93,7 +91,7 @@ public class FileService : IFileService
     public async Task<bool> DeleteByIdAsync(Guid id)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        var query = connection.SqlBuilder($"DELETE FROM files WHERE id = {id}");
+        var query = connection.SqlBuilder($"DELETE FROM Files WHERE id = {id}");
         var result = await query.ExecuteAsync();
         return result > 0;
     }

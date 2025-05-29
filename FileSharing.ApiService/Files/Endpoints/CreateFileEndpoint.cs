@@ -8,6 +8,7 @@ using FFMpegCore;
 using FileSharing.ApiService.Contracts;
 using FileSharing.ApiService.Contracts.Requests;
 using FileSharing.ApiService.Contracts.Responses;
+using FileSharing.ApiService.Metadata;
 using FileSharing.Constants;
 
 namespace FileSharing.ApiService.Files.Endpoints;
@@ -15,13 +16,19 @@ namespace FileSharing.ApiService.Files.Endpoints;
 public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
 {
     private readonly IFileService _fileService;
-    private readonly IAmazonS3 _s3;
+    private readonly IMetadataService _metadataService;
+    private readonly IMetadataTaskQueue _taskQueue;
     private readonly ILogger<CreateFileEndpoint> _logger;
 
-    public CreateFileEndpoint(IFileService fileService, IAmazonS3 s3, ILogger<CreateFileEndpoint> logger)
+    public CreateFileEndpoint(
+        IFileService fileService,
+        IMetadataService metadataService,
+        IMetadataTaskQueue taskQueue,
+        ILogger<CreateFileEndpoint> logger)
     {
         _fileService = fileService;
-        _s3 = s3;
+        _metadataService = metadataService;
+        _taskQueue = taskQueue;
         _logger = logger;
     }
     
@@ -33,7 +40,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         AllowAnonymous();
     }
 
-    public override async Task HandleAsync(CreateFileRequest req, CancellationToken ct)
+    public override async Task HandleAsync(CreateFileRequest req, CancellationToken token)
     {
         // TODO: Have i protected myself against the stampede threat? 
         
@@ -41,11 +48,11 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         {
             case 0:
                 AddError("One file must be provided.");
-                await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
+                await SendErrorsAsync(StatusCodes.Status400BadRequest, token);
                 return;
             case > Storage.MaxFileSize:
                 AddError("File too large.");
-                await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
+                await SendErrorsAsync(StatusCodes.Status400BadRequest, token);
                 return;
         }
         
@@ -53,7 +60,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         if (string.IsNullOrWhiteSpace(fileName) || !fileName.Contains('.'))
         {
             AddError("Unsupported file format.");
-            await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
+            await SendErrorsAsync(StatusCodes.Status400BadRequest, token);
             return;
         }
         
@@ -68,7 +75,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         if (file.Type == FileType.Unknown)
         {
             AddError("Unsupported file format.");
-            await SendErrorsAsync(StatusCodes.Status400BadRequest, ct);
+            await SendErrorsAsync(StatusCodes.Status400BadRequest, token);
             return;
         }
         
@@ -89,9 +96,9 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
             int bytesRead;
             
             await using var inputStream = req.File.OpenReadStream();
-            while ((bytesRead = await inputStream.ReadAsync(buffer, ct)) > 0)
+            while ((bytesRead = await inputStream.ReadAsync(buffer, token)) > 0)
             {
-                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), token);
                 hasher.Append(buffer.AsSpan(0, bytesRead));
             }
         }
@@ -99,22 +106,24 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
         var hashBytes = hasher.GetCurrentHash();
         
         result = await _fileService.CompleteAsync(result.Id, hashBytes, filePath);
-        switch (result)
+        if (result is null)
         {
-            case null:
-                AddError("Impossible");
-                await SendErrorsAsync(StatusCodes.Status500InternalServerError, ct);
-                return;
-            case { FakeFile: false, Type: FileType.Audio }:
-                // TODO: Move to a queue?
-                _ = Task.Run(async () => await ProcessAudio(result, filePath), ct);
-                break;
+            await SendErrorsAsync(StatusCodes.Status500InternalServerError, token);
+            return;
         }
 
-        await SendAsync(result.MapToResponse(), cancellation: ct);
+        if (!result.FakeFile)
+        {
+            await _taskQueue.EnqueueAsync(async _ =>
+            {
+                await _metadataService.CreateAsync(result, filePath);
+            });
+        }
+
+        await SendAsync(result.MapToResponse(), cancellation: token);
     }
 
-    private static async Task<string> ConvertToAudioPreviewFileAsync(string inputFilePath)
+    /*private static async Task<string> ConvertToAudioPreviewFileAsync(string inputFilePath)
     {
         // Generate a unique temporary file path for the preview
         var tempPreviewPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.m4a");
@@ -142,7 +151,7 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
          * 1. Make sure audio isnt too long
          * 2. Make sure it has one audio stream
          * 3. Extract metadata
-         */
+         #1#
         
         //_logger.LogInformation("Processing audio file...");
         
@@ -178,5 +187,5 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
                 _logger.LogInformation("Deleted temp file: {TmpFile}", tmpFile);
             }
         }
-    }
+    }*/
 }

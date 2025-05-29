@@ -7,16 +7,19 @@ public static class FileUtil
 {
     private static readonly HashSet<string> ArchiveExtensions = new (StringComparer.OrdinalIgnoreCase)
     {
-        // Archives
-        "zip", "rar"
+        "zip", "rar", "7z", "dmg"
     };
     
     private static readonly HashSet<string> AudioExtensions = new (StringComparer.OrdinalIgnoreCase)
     {
-        // Audio
         "wav", "flac",
         "mp3", "m4a",
         "opus", "ogg", "aac", "aif", "aiff"
+    };
+    
+    private static readonly HashSet<string> ImageExtensions = new (StringComparer.OrdinalIgnoreCase)
+    {
+        "png", "webp", "jpeg", "jpg"
     };
     
     public static string GetExtension(string fileName)
@@ -36,6 +39,11 @@ public static class FileUtil
         if (AudioExtensions.Contains(ext))
         {
             return FileType.Audio;
+        }
+        
+        if (ImageExtensions.Contains(ext))
+        {
+            return FileType.Image;
         }
 
         return FileType.Unknown;
