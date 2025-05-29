@@ -4,7 +4,7 @@ using Dapper;
 using Npgsql;
 using NpgsqlTypes;
 
-namespace FileSharing.ApiService.Dapper;
+namespace FileSharing.ApiService.Database;
 
 public class JsonbTypeHandler<T> : SqlMapper.TypeHandler<T>
 {

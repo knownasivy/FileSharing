@@ -21,5 +21,10 @@
         <PackageReference Include="Aspire.Hosting.Redis" Version="9.3.0" />
         <PackageReference Include="Aspire.Npgsql" Version="9.3.0" />
     </ItemGroup>
+    
+    <Target Name="EnsureAppSettings" BeforeTargets="Build">
+        <Message Importance="high" Text="Checking for appsettings.json..." />
+        <Exec Command="if not exist &quot;appsettings.json&quot; copy /Y &quot;appsettings.Example.json&quot; &quot;appsettings.json&quot;" />
+    </Target>
 
 </Project>

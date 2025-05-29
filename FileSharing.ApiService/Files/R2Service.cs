@@ -1,7 +1,7 @@
 ﻿using Amazon.Runtime;
 using Amazon.S3;
 
-namespace FileSharing.ApiService;
+namespace FileSharing.ApiService.Files;
 
 // TODO: Move to new way of getting options from config?
 public class R2Config
@@ -11,6 +11,7 @@ public class R2Config
     public required string AccountId { get; init; } = string.Empty;
 }
 
+// TODO: Add other methods like uploading etc
 public static class R2Service
 {
     public static IAmazonS3 GetR2Config(R2Config r2Config)

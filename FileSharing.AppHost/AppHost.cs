@@ -1,3 +1,4 @@
+using FileSharing.AppHost.OpenTelemetryCollector;
 using FileSharing.Constants;
 using Microsoft.Extensions.Hosting;
 
@@ -7,71 +8,32 @@ var postgres = builder.AddPostgres(ProjectNames.Postgres)
     .WithDataVolume(isReadOnly: false);
 
 var databaseName = ProjectNames.GetConnectionString(builder.Environment.IsDevelopment());
-if (builder.Environment.IsDevelopment())
-{
-    postgres.WithPgAdmin();
-}
-
-/*
-create table Files
-(
-    Id        uuid not null
-        constraint Files_pk
-            primary key,
-    Name      text not null,
-    Size      integer not null,
-    Type      integer not null,
-    Status    integer not null,
-    CreatedAt timestamp not null,
-    Hash      bytea not null,
-    FakeFile  boolean not null,
-    IPAddress text not null
-);
-
-create table AudioMetadata
-(
-    FileId        uuid not null
-        constraint AudioMetadata_pk
-            primary key,
-    Title       text not null,
-    Album       text not null,
-    Artist      text not null,
-    AttachedPic boolean not null
-);
-
-create table ArchiveMetadata
-(
-    FileId        uuid not null
-        constraint ArchiveMetadata_pk
-            primary key,
-    Password  boolean not null,
-    Files jsonb not null
-);
-
-create table ImageMetadata
-(
-    FileId        uuid not null
-        constraint ImageMetadata_pk
-            primary key,
-    Size integer not null
-);
-*/
-
-var creationScript = $$"""
-                       -- Create the database
-                       CREATE DATABASE {{databaseName}};
-                       """;
-
-var db = postgres.AddDatabase(databaseName)
-    .WithCreationScript(creationScript);
+var db = postgres.AddDatabase(databaseName);
 
 // TODO: Maybe make persistant in the future
 //var cache = builder.AddRedis(ProjectNames.Redis);
 //    .WithDataVolume(isReadOnly: false);
 
+var prometheus = builder.AddContainer("prometheus", "prom/prometheus", "v3.2.1")
+    .WithBindMount("../prometheus", "/etc/prometheus", isReadOnly: true)
+    .WithArgs("--web.enable-otlp-receiver", "--config.file=/etc/prometheus/prometheus.yml")
+    .WithHttpEndpoint(targetPort: 9090, name: "http");
+
+var grafana = builder.AddContainer("grafana", "grafana/grafana")
+    .WithBindMount("../grafana/config", "/etc/grafana", isReadOnly: true)
+    .WithBindMount("../grafana/dashboards", "/var/lib/grafana/dashboards", isReadOnly: true)
+    .WithEnvironment("PROMETHEUS_ENDPOINT", prometheus.GetEndpoint("http"))
+    .WithHttpEndpoint(targetPort: 3000, name: "http");
+
+builder.AddOpenTelemetryCollector("otelcollector", "../otelcollector/config.yaml")
+    .WithEnvironment("PROMETHEUS_ENDPOINT", $"{prometheus.GetEndpoint("http")}/api/v1/otlp");
+
 builder.AddProject<Projects.FileSharing_ApiService>(ProjectNames.ApiService)
     .WithHttpHealthCheck("/health")
+    .WithEnvironment("GRAFANA_URL", grafana.GetEndpoint("http"))
     .WithReference(db)
     .WaitFor(postgres);
 
-builder.Build().Run();
+await using var app = builder.Build();
+
+await app.RunAsync();

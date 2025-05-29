@@ -1,11 +1,12 @@
+using System.Threading.Channels;
 using Dapper;
 using FastEndpoints;
 using FastEndpoints.Swagger;
-using FileSharing.ApiService;
-using FileSharing.ApiService.Dapper;
+using FileSharing.ApiService.Database;
 using FileSharing.ApiService.Downloads;
 using FileSharing.ApiService.Files;
 using FileSharing.ApiService.Metadata;
+using FileSharing.ApiService.Metadata.Types;
 using FileSharing.ApiService.Middleware;
 using FileSharing.Constants;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -67,12 +68,24 @@ builder.Services.AddSingleton(R2Service.GetR2Config(new R2Config
 }));
 
 SqlMapper.AddTypeHandler(new JsonbTypeHandler<List<string>>());
+SqlMapper.AddTypeHandler(new JsonbTypeHandler<List<ZipItem>>());
 
 builder.Services.AddSingleton<IFileService, FileService>();
 builder.Services.AddSingleton<IMetadataService, MetadataService>();
 builder.Services.AddSingleton<IDownloadService, DownloadService>();
-builder.Services.AddSingleton<IMetadataTaskQueue, MetadataTaskQueue>();
-builder.Services.AddHostedService<MetadataTaskProcessor>();
+
+var connectionStr = builder.Configuration
+    .GetConnectionString(ProjectNames.GetConnectionString(builder.Environment.IsDevelopment()));
+builder.Services.AddSingleton(_ => new DatabaseInitializer(connectionStr));
+
+// If needed, make this bounded
+builder.Services.AddSingleton<Channel<MetadataItem>>(
+    _ => Channel.CreateUnbounded<MetadataItem>(new UnboundedChannelOptions
+    {
+        SingleReader = true
+    }));
+
+builder.Services.AddHostedService<MetadataProcessor>();
 
 builder.Services.Configure<KestrelServerOptions>(options =>
 {
@@ -96,12 +109,20 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.MapGet("startup", () => new
+{
+    GrafanaUrl = app.Configuration["GRAFANA_URL"]!
+});
+
 if (app.Environment.IsProduction())
 {
     app.UseForwardedHeaders();
 }
 
 app.UseMiddleware<Protection>();
-
 app.UseCors();
+
+app.Services.GetRequiredService<DatabaseInitializer>()
+    .Initialize();
+
 app.Run();

@@ -1,5 +1,6 @@
 ﻿using Amazon.S3;
 using FileSharing.ApiService.Files;
+using FileSharing.ApiService.Metadata.Types;
 
 namespace FileSharing.ApiService.Metadata.Factories;
 

@@ -133,7 +133,4 @@ public interface IMetadataService
     Task<IMetadata?> GetByFileAsync(FileUpload file);
 }
 
-public interface IMetadata
-{
-    Task<IMetadata?> ProcessAsync(FileUpload file, string filePath, IAmazonS3? s3);
-}
+// TODO: Might not need this

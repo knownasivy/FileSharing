@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.IO.Hashing;
+using System.Threading.Channels;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -16,19 +17,22 @@ namespace FileSharing.ApiService.Files.Endpoints;
 public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
 {
     private readonly IFileService _fileService;
-    private readonly IMetadataService _metadataService;
-    private readonly IMetadataTaskQueue _taskQueue;
+    // private readonly IMetadataService _metadataService;
+    // private readonly IMetadataTaskQueue _taskQueue;
+    private readonly Channel<MetadataItem> _channel;
     private readonly ILogger<CreateFileEndpoint> _logger;
 
     public CreateFileEndpoint(
         IFileService fileService,
-        IMetadataService metadataService,
-        IMetadataTaskQueue taskQueue,
+        // IMetadataService metadataService,
+        // IMetadataTaskQueue taskQueue,
+        Channel<MetadataItem> channel,
         ILogger<CreateFileEndpoint> logger)
     {
         _fileService = fileService;
-        _metadataService = metadataService;
-        _taskQueue = taskQueue;
+        _channel = channel;
+        // _metadataService = metadataService;
+        // _taskQueue = taskQueue;
         _logger = logger;
     }
     
@@ -114,78 +118,9 @@ public class CreateFileEndpoint : Endpoint<CreateFileRequest, FileResponse>
 
         if (!result.FakeFile)
         {
-            await _taskQueue.EnqueueAsync(async _ =>
-            {
-                await _metadataService.CreateAsync(result, filePath);
-            });
+            await _channel.Writer.WriteAsync(new MetadataItem(result, filePath), token);
         }
 
         await SendAsync(result.MapToResponse(), cancellation: token);
     }
-
-    /*private static async Task<string> ConvertToAudioPreviewFileAsync(string inputFilePath)
-    {
-        // Generate a unique temporary file path for the preview
-        var tempPreviewPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.m4a");
-
-        await FFMpegArguments
-            .FromFileInput(inputFilePath)
-            .OutputToFile(tempPreviewPath, overwrite: true, options => options
-                    .WithAudioCodec("aac")
-                    .WithAudioBitrate(80)
-                    .ForceFormat("ipod")
-                    .WithCustomArgument("-vn") // Disable video
-                    .WithCustomArgument("-map_metadata")
-                    .WithCustomArgument("-1")  // Remove metadata
-            )
-            .ProcessAsynchronously();
-
-        return tempPreviewPath;
-    }
-
-    // TODO: Switch to FFMpegCore?
-    private async Task ProcessAudio(FileUpload file, string filePath)
-    {
-        /*
-         * TODO:
-         * 1. Make sure audio isnt too long
-         * 2. Make sure it has one audio stream
-         * 3. Extract metadata
-         #1#
-        
-        //_logger.LogInformation("Processing audio file...");
-        
-        var previewFileName = $"{file.Id:N}_prev.m4a";
-        var tmpFile = await ConvertToAudioPreviewFileAsync(filePath);
-
-        try
-        {
-            var request = new PutObjectRequest
-            {
-                BucketName = "files",
-                Key = previewFileName,
-                FilePath = tmpFile,
-                DisablePayloadSigning = true
-            };
-
-            if (!File.Exists(tmpFile) || new FileInfo(tmpFile).Length > file.Size)
-            {
-                request.InputStream = File.Open(filePath, FileMode.Open, FileAccess.Read);
-            }
-
-            await _s3.PutObjectAsync(request);
-        }
-        catch (AmazonS3Exception ex)
-        {
-            _logger.LogError(ex, "Error uploading file to r2");
-        }
-        finally
-        {
-            if (File.Exists(tmpFile))
-            {
-                File.Delete(tmpFile);
-                _logger.LogInformation("Deleted temp file: {TmpFile}", tmpFile);
-            }
-        }
-    }*/
 }

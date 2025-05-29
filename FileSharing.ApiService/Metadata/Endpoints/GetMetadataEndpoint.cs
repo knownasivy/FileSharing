@@ -49,6 +49,8 @@ public class GetMetadataEndpoint : EndpointWithoutRequest<MetadataResponse>
             await SendNotFoundAsync(ct);
             return;
         }
+        
+        metadata.FileId = fileId;
 
         await SendAsync(metadata.MapToResponse(), cancellation: ct);
     }
