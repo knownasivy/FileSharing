@@ -1,6 +1,7 @@
-﻿using DbUp;
-using FileSharing.Constants;
-using Npgsql;
+﻿using Dapper;
+using DbUp;
+using FileSharing.ApiService.Database.Types;
+using FileSharing.ApiService.Models;
 
 namespace FileSharing.ApiService.Database;
 
@@ -19,6 +20,8 @@ public class DatabaseInitializer
         {
             throw new Exception("Connection string not set");
         }
+        
+        SqlMapper.AddTypeHandler(new JsonbTypeHandler<List<ZipItem>>());
         
         EnsureDatabase.For.PostgresqlDatabase(_connectionString);
 

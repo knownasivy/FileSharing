@@ -1,8 +1,22 @@
-﻿create table Files
+﻿create table Uploads
+(
+    Id        uuid not null
+        constraint Uploads_pk
+            primary key,
+    Status    integer not null,
+    CreatedAt timestamp not null,
+    IPAddress text not null
+);
+
+create table UploadFiles
 (
     Id        uuid not null
         constraint Files_pk
             primary key,
+    UploadId  uuid not null
+        constraint Files_uploads_id_fk
+            references uploads(id)
+            on delete cascade,
     Name      text not null,
     Size      integer not null,
     Type      integer not null,
@@ -11,32 +25,4 @@
     Hash      bytea not null,
     FakeFile  boolean not null,
     IPAddress text not null
-);
-
-create table AudioMetadata
-(
-    FileId        uuid not null
-        constraint AudioMetadata_pk
-            primary key,
-    Title       text not null,
-    Album       text not null,
-    Artist      text not null,
-    AttachedPic boolean not null
-);
-
-create table ArchiveMetadata
-(
-    FileId        uuid not null
-        constraint ArchiveMetadata_pk
-            primary key,
-    Password  boolean not null,
-    Files jsonb not null
-);
-
-create table ImageMetadata
-(
-    FileId        uuid not null
-        constraint ImageMetadata_pk
-            primary key,
-    Size integer not null
 );

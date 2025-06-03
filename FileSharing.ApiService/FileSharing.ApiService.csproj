@@ -2,47 +2,38 @@
 
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <RootNamespace>FileSharing.ApiService</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\FileSharing.ServiceDefaults\FileSharing.ServiceDefaults.csproj" />
-        <ProjectReference Include="..\FileSharing.Constants\FileSharing.Constants.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
         <PackageReference Include="Aspire.Npgsql" Version="9.3.0" />
-        <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="9.3.0" />
-        <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.1" />
-        <PackageReference Include="AWSSDK.S3" Version="4.0.0.7" />
+        <PackageReference Include="AWSSDK.S3" Version="4.0.1.1" />
         <PackageReference Include="Dapper" Version="2.1.66" />
         <PackageReference Include="dbup-postgresql" Version="6.0.3" />
-        <PackageReference Include="FastEndpoints" Version="6.2.0-beta.3" />
-        <PackageReference Include="FastEndpoints.Swagger" Version="6.1.0" />
         <PackageReference Include="FFMpegCore" Version="5.2.0" />
+        <PackageReference Include="FluentValidation" Version="12.0.0" />
         <PackageReference Include="InterpolatedSql.Dapper" Version="2.4.0" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.5"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="9.5.0" />
         <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0-preview.4.25258.110" />
-        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.0-preview.4.25258.110" />
         <PackageReference Include="SharpZipLib" Version="1.4.2" />
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
+        <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.2" />
+        <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="8.1.2" />
         <PackageReference Include="System.IO.Hashing" Version="9.0.4" />
-        <PackageReference Include="ZLinq" Version="1.4.7" />
-    </ItemGroup>
-
-    <Target Name="EnsureAppSettings" BeforeTargets="Build">
-        <Message Importance="high" Text="Checking for appsettings.json..." />
-        <Exec Command="if not exist &quot;appsettings.json&quot; copy /Y &quot;appsettings.Example.json&quot; &quot;appsettings.json&quot;" />
-    </Target>
-
-    <ItemGroup>
-      <Folder Include="wwwroot\" />
+        <PackageReference Include="ZLinq" Version="1.4.9" />
     </ItemGroup>
 
     <ItemGroup>
-      <None Remove="Database\Scripts\Script0001 - Create tables.sql" />
+      <ProjectReference Include="..\FileSharing.Constants\FileSharing.Constants.csproj" />
+      <ProjectReference Include="..\FileSharing.ServiceDefaults\FileSharing.ServiceDefaults.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
       <EmbeddedResource Include="Database\Scripts\Script0001 - Create tables.sql" />
+      <EmbeddedResource Include="Database\Scripts\Script0002 - Add tables.sql" />
     </ItemGroup>
 
 </Project>

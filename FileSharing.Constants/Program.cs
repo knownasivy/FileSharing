@@ -19,7 +19,7 @@ public static class Storage
     public static TimeSpan MaxFileDuration = TimeSpan.FromMinutes(45);
     public const string Bucket = "files";
     public const int BufferSize = 80 * 1024; // 80 KB per second
-    public const long MaxCachedFileSize = 15L * 1024 * 1024; // 20 MB
+    public const long MaxCachedFileSize = 15L * 1024 * 1024; // 15 MB
     public const long MaxMemCacheSize = 2L * 1024 * 1024 * 1024; // 2 GB
     public const long MaxFileSize = 1L * 1024 * 1024 * 1024; // 1 GB
 }

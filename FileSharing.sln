@@ -4,9 +4,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileSharing.AppHost", "File
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileSharing.ServiceDefaults", "FileSharing.ServiceDefaults\FileSharing.ServiceDefaults.csproj", "{C72E5226-56BF-4539-868E-ECFAE69CE4F3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileSharing.ApiService", "FileSharing.ApiService\FileSharing.ApiService.csproj", "{88BA5137-CBC5-4FC3-86A3-5B65A40FAFB1}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileSharing.Constants", "FileSharing.Constants\FileSharing.Constants.csproj", "{F9156A0F-AB3B-4AD0-8DCF-E9C5E601242A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileSharing.ApiService", "FileSharing.ApiService\FileSharing.ApiService.csproj", "{310BB4B0-3F45-4D18-A8BA-3E19E56840EA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -22,13 +22,13 @@ Global
 		{C72E5226-56BF-4539-868E-ECFAE69CE4F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C72E5226-56BF-4539-868E-ECFAE69CE4F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C72E5226-56BF-4539-868E-ECFAE69CE4F3}.Release|Any CPU.Build.0 = Release|Any CPU
-		{88BA5137-CBC5-4FC3-86A3-5B65A40FAFB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{88BA5137-CBC5-4FC3-86A3-5B65A40FAFB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{88BA5137-CBC5-4FC3-86A3-5B65A40FAFB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{88BA5137-CBC5-4FC3-86A3-5B65A40FAFB1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F9156A0F-AB3B-4AD0-8DCF-E9C5E601242A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F9156A0F-AB3B-4AD0-8DCF-E9C5E601242A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F9156A0F-AB3B-4AD0-8DCF-E9C5E601242A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F9156A0F-AB3B-4AD0-8DCF-E9C5E601242A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{310BB4B0-3F45-4D18-A8BA-3E19E56840EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{310BB4B0-3F45-4D18-A8BA-3E19E56840EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{310BB4B0-3F45-4D18-A8BA-3E19E56840EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{310BB4B0-3F45-4D18-A8BA-3E19E56840EA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
