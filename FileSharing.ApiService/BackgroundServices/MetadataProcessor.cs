@@ -8,12 +8,12 @@ namespace FileSharing.ApiService.BackgroundServices;
 
 public interface IMetadataProcessor
 {
-    Task<bool> EnqueueAsync(UploadFile file, string filePath, CancellationToken cancellationToken = default);
+    Task<bool> EnqueueAsync(UploadFile file, CancellationToken cancellationToken = default);
 }
 
 public class MetadataProcessor : BackgroundService, IMetadataProcessor
 {
-    private record MetadataItem(UploadFile File, string FilePath);
+    private record MetadataItem(UploadFile File);
     
     private readonly IMetadataService _metadataService;
     private readonly ILogger<MetadataProcessor> _logger;
@@ -36,11 +36,11 @@ public class MetadataProcessor : BackgroundService, IMetadataProcessor
         _writer = _channel.Writer;
     }
     
-    public async Task<bool> EnqueueAsync(UploadFile file, string filePath, CancellationToken cancellationToken = default)
+    public async Task<bool> EnqueueAsync(UploadFile file, CancellationToken cancellationToken = default)
     {
         try
         {
-            await _writer.WriteAsync(new MetadataItem(file, filePath), cancellationToken);
+            await _writer.WriteAsync(new MetadataItem(file), cancellationToken);
             return true;
         }
         catch (InvalidOperationException)
@@ -76,12 +76,12 @@ public class MetadataProcessor : BackgroundService, IMetadataProcessor
                     try
                     {
                         // TODO: Pass cancellation token all the way through
-                        await _metadataService.ProcessFile(request.File, request.FilePath);
+                        await _metadataService.ProcessFile(request.File);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error processing metadata for {FilePath}, FileId: {FileId}", 
-                            request.FilePath, request.File.Id);
+                            request.File.FilePath, request.File.Id);
                     }
                 }
             }

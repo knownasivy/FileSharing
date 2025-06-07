@@ -1,6 +1,6 @@
-﻿using System.Collections.Concurrent;
-using FileSharing.ApiService.Downloads;
-using FileSharing.ApiService.Models;
+﻿using System.Buffers;
+using System.Collections.Concurrent;
+using FileSharing.ApiService.Shared;
 using FileSharing.Constants;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -8,146 +8,177 @@ namespace FileSharing.ApiService.Services;
 
 public interface IDownloadService
 {
-    Task<Download?> GetByIdAsync(Guid id);
+    Task<IResult> GetByIdAsync(Guid id, string ipAddress);
 }
 
 public class DownloadService : IDownloadService
 {
     private readonly ILogger<DownloadService> _logger;
-    private readonly IFileService _fileService;
+    private readonly IUploadFileService _uploadFileService;
+    private readonly IMetricsService _metricsService;
     private readonly IMemoryCache _cache;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks;
-
-    public DownloadService(ILogger<DownloadService> logger, IFileService fileService, IMemoryCache cache)
+    
+    public DownloadService(
+        ILogger<DownloadService> logger, 
+        IUploadFileService uploadFileService, 
+        IMetricsService metricsService, 
+        IMemoryCache cache)
     {
         _logger = logger;
-        _fileService = fileService;
+        _uploadFileService = uploadFileService;
+        _metricsService = metricsService;
         _cache = cache;
         _locks = new ConcurrentDictionary<string, SemaphoreSlim>();
     }
-
+    
     // TODO: Use result pattern
-    public async Task<Download?> GetByIdAsync(Guid id)
+    public async Task<IResult> GetByIdAsync(Guid id, string ipAddress)
     {
         // TODO: Max cache per ipfiles
-        var file = await GetRealFile(id);
-        if (file == null)
+        var downloadFile = await _uploadFileService.GetDownloadFileByIdAsync(id);
+        if (downloadFile is null)
         {
             _logger.LogError("File not found");
-            return null;
+            return Results.NotFound();
         }
-        
-        // TODO: fix?
-        if (file.Status == FileStatus.Uploading)
+
+        if (string.IsNullOrEmpty(downloadFile.FilePath))
         {
             _logger.LogError("File still uploading");
-            return null;
+            return Results.BadRequest();
         }
+
+        var contentType = FileUtil.GetContentTypeMime(downloadFile.Name);
         
-        var filePath = Path.Combine(file.GetLocation(), $"{file.Id:N}.{file.Extension}");
-        
-        if (file.Size > Storage.MaxCachedFileSize)
+        var bufferSize = FileUtil.GetBufferSize(downloadFile.Size);
+        if (downloadFile.Size > Storage.MaxCachedFileSize)
         {
-            if (!new FileInfo(filePath).Exists)
-            {
-                throw new FileNotFoundException(filePath);
-            }
-
-            return GetRegularDownload(filePath, file.Name);
+            return GetFileDownload(downloadFile, contentType, bufferSize, ipAddress);
         }
 
-        var cachedFile = await GetOrCreateAsync(
-            $"download:{file.Id}",
-            file.Size,
-            async () =>
-            {
-                _logger.LogInformation("Cache add.");
-                if (!new FileInfo(filePath).Exists)
+        _logger.LogInformation("Caching file: {fileId}", downloadFile.RealId);
+        
+        try
+        {
+            var cachedFile = await GetOrCreateAsync(
+                $"download:{downloadFile.RealId}",
+                downloadFile.Size,
+                async () =>
                 {
-                    throw new FileNotFoundException(filePath);
-                }
-                // TODO: I think this would be better as a stream
-                return await File.ReadAllBytesAsync(filePath);
-            });
+                    _logger.LogInformation("Cache add.");
+                    if (!File.Exists(downloadFile.FilePath))
+                        throw new FileNotFoundException();
+                
+                    return await ReadFileForCache(
+                        downloadFile.FilePath,
+                        downloadFile.Size,
+                        bufferSize);
+                });
         
-        if (cachedFile is not null)
-        {
-            _logger.LogInformation("Cache hit.");
-            return new Download
+            if (cachedFile is not null)
             {
-                DownloadStream = new MemoryStream(cachedFile),
-                FileName = file.Name
-            };
+                _logger.LogInformation("Cache hit.");
+                _metricsService.RecordDownload(ipAddress, cachedFile.Length);
+                return Results.Bytes(cachedFile, contentType, downloadFile.Name);
+            }
         }
-
+        catch(FileNotFoundException)
+        {
+            return Results.NotFound();
+        }
+        
         // Fallback
         _logger.LogError("Cache miss.");
-        return GetRegularDownload(filePath, file.Name);
+        return GetFileDownload(downloadFile, contentType, bufferSize, ipAddress);
     }
-    
-    private async Task<UploadFile?> GetRealFile(Guid fileId)
+
+    private IResult GetFileDownload(
+        DownloadFile downloadFile, 
+        string contentType, 
+        int bufferSize, 
+        string ipAddress)
     {
-        var file = await _fileService.GetByIdAsync(fileId);
-        if (file is null)
-        {
-            _logger.LogError("File is null");
-            return file;
-        }
-        
-        if (!file.FakeFile)
-        {
-            _logger.LogError("File not fake file");
-            return file;
-        }
+        if (!File.Exists(downloadFile.FilePath)) 
+            return Results.NotFound();
 
-        var fileName = file.Name;
-        file = await _fileService.GetByHashAsync(file.Hash);
-
-        if (file is not null)
+        try
         {
-            file.Name = fileName;
-        }
-        else
-        {
-            _logger.LogError("File still null");
-        }
+            var fs = new FileStream(
+                downloadFile.FilePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize,
+                FileOptions.SequentialScan);
         
-        return file;
+            var countingStream = new CountingStream(fs, bytesRead => 
+                _metricsService.RecordDownload(ipAddress, bytesRead)
+            );
+                    
+            return Results.File(countingStream, contentType, downloadFile.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to create file stream for {filePath}", downloadFile.FilePath);
+            return Results.InternalServerError();
+        }
     }
 
-    private static Download GetRegularDownload(string filePath, string fileName)
+    private static async Task<byte[]> ReadFileForCache(
+        string filePath, 
+        long fileSize, 
+        int bufferSize)
     {
-        var stream = new FileStream(filePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            bufferSize: Storage.BufferSize,
-            useAsync: true);
-        
-        return new Download
-        {
-            DownloadStream = stream,
-            FileName = fileName
-        };
-    }
+        var result = new byte[fileSize];
+        var rentedBuffer = ArrayPool<byte>.Shared.Rent(bufferSize);
     
+        try
+        {
+            await using var fileStream = new FileStream(filePath, 
+                FileMode.Open, 
+                FileAccess.Read, 
+                FileShare.Read, 
+                bufferSize, 
+                FileOptions.SequentialScan | FileOptions.Asynchronous);
+            
+            var totalBytesRead = 0;
+
+            while (totalBytesRead < fileSize)
+            {
+                var maxRead = (int) Math.Min(bufferSize, fileSize - totalBytesRead);
+                var bytesRead = await fileStream.ReadAsync(rentedBuffer.AsMemory(0, maxRead));
+            
+                if (bytesRead == 0) break;
+                
+                Array.Copy(rentedBuffer, 0, result, totalBytesRead, bytesRead);
+                totalBytesRead += bytesRead;
+            }
+        
+            if (totalBytesRead != fileSize)
+            {
+                Array.Resize(ref result, totalBytesRead);
+            }
+            
+            return result;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rentedBuffer);
+        }
+    }
+
     // TODO: Simplify
     private async Task<T?> GetOrCreateAsync<T>(string key, long size, Func<Task<T>> factory)
     {
-        if (_cache.TryGetValue(key, out T? value))
-        {
-            return value;
-        }
+        if (_cache.TryGetValue(key, out T? value)) return value;
 
         var myLock = _locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
 
         await myLock.WaitAsync();
         try
         {
-            if (_cache.TryGetValue(key, out value))
-            {
-                return value;
-            }
+            if (_cache.TryGetValue(key, out value)) return value;
 
             value = await factory();
             _cache.Set(key, value, new MemoryCacheEntryOptions
@@ -161,9 +192,7 @@ public class DownloadService : IDownloadService
         {
             myLock.Release();
             if (_locks.TryRemove(key, out var removedLock) && removedLock.CurrentCount == 1)
-            {
                 removedLock.Dispose();
-            }
         }
     }
 }

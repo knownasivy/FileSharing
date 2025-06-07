@@ -9,22 +9,18 @@ public class GetFile
     {
         public void MapEndpoint(IEndpointRouteBuilder app)
         {
-            app.MapGet("files/{fileId}", Handler).WithTags("Files");
+            app.MapGet("files/{fileId:guid}", Handler).WithTags("Files");
         }
     }
     
     public static async Task<IResult> Handler(
         ILogger<Endpoint> logger, 
-        IFileService fileService, 
-        string fileId)
+        IUploadFileService uploadFileService, 
+        Guid fileId)
     {
-        // For using in swagger or whatever
-        fileId = fileId.Replace("-", "");
-        if (!Guid.TryParseExact(fileId, "N", out var id))
-            return Results.NotFound();
-        
-        var file = await fileService.GetByIdAsync(id);
+        var file = await uploadFileService.GetByIdAsync(fileId);
 
+        // TODO: Better errors
         return file is null ? Results.NotFound() 
             : Results.Ok(file);
     }

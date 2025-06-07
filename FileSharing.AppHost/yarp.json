@@ -1,0 +1,48 @@
+﻿{
+  "ReverseProxy": {
+    "Routes": {
+      "grafana": {
+        "ClusterId": "grafana",
+        "Match": {
+          "Path": "/grafana/{**catch-all}"
+        },
+        "Order": 1
+      },
+      "api": {
+        "ClusterId": "api",
+        "Match": {
+          "Path": "/api/{**catch-all}"
+        },
+        "Transforms": [
+          { "PathRemovePrefix": "/api" },
+          { "PathPrefix": "/api" },
+          { "X-Forwarded": "Set" }
+        ],
+        "Order": 1
+      },
+      "home": {
+        "ClusterId": "grafana",
+        "Match": {
+          "Path": "unused/{**catch-all}"
+        },
+        "Order": 100
+      }
+    },
+    "Clusters": {
+      "grafana": {
+        "Destinations": {
+          "grafana": {
+            "Address": "http://localhost:3000/"
+          }
+        }
+      },
+      "api": {
+        "Destinations": {
+          "api/d1": {
+            "Address": "http://apiservice/"
+          }
+        }
+      }
+    }
+  }
+}

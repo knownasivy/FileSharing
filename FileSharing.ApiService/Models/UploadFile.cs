@@ -7,7 +7,7 @@ public class UploadFile
 {
     public Guid Id { get; } = Guid.CreateVersion7();
     public required Guid UploadId { get; init; }
-    public required string Name { get; set; }
+    public required string Name { get; init; }
     public required long Size { get; init; }
     public required FileType Type { get; init; }
     public FileStatus Status { get; set; } = FileStatus.Uploading;
@@ -15,50 +15,38 @@ public class UploadFile
     public byte[] Hash { get; set; } = [];
     public bool FakeFile { get; set; }
     public required string IpAddress { get; init; }
-    public string Extension => FileUtil.GetExtension(Name);
-    
-    public string CreatedAtFormated() => 
-        CreatedAt.ToString("MM-dd-yy");
-    
-    public string GetLocation()
+    public string? FilePath { get; set; }
+    public string Extension => FileUtil.GetFileExtension(Name);
+    private string GetCreatedAtFormated() => CreatedAt.ToString("MM-dd-yy");
+    private string GetLocation()
     {
-        // If I keep using this check move to func
-        if (FakeFile) throw new Exception("A FakeFile does not have a preview");
-        
-        return Path.Combine("Uploads", CreatedAtFormated());
+        var path = Path.Combine("Uploads", GetCreatedAtFormated());
+        if (!Directory.Exists(path))
+            Directory.CreateDirectory(path);
+        return path;
     }
+    public string GetThisFilePath() =>
+        Path.Combine(GetLocation(), $"{Id:N}.{Extension}");
     
-    // TODO: Might be able to use more than one place
-    public string GetPreviewFilename()
-    {
-        if (FakeFile) throw new Exception("A FakeFile does not have a preview");
-        
-        return Type switch
+    public string GetPreviewFilename() => 
+        Type switch
         {
-            FileType.Audio => $"{Id:N}_prev.m4a",
-            FileType.Image => $"{Id:N}_img.webp",
-            _ => throw new Exception("Impossible")
+            _ when FakeFile => throw new Exception("Impossible"),
+            _ when Type != FileType.Audio => throw new Exception("Impossible"),
+            _ => $"{Id:N}_prev.m4a"
         };
-    }
-    
-    public bool CanExtractMetadata()
-    {
-        if (FakeFile) throw new Exception("A FakeFile does not have metadata");
 
-        const long maxAudioExtractSize = 250L * 1024 * 1024; // 250 MB
-        const long maxImageExtractSize = 75L * 1024 * 1024; // 75 MB
-        
-        return Type switch
+    private const long MaxAudioExtractSize = 250L * 1024 * 1024; // 250 MB
+    public bool CanExtractMetadata() =>
+        Type switch
         {
-            FileType.Audio when Size > maxAudioExtractSize => false,
-            FileType.Image when Size > maxImageExtractSize => false,
+            _ when FakeFile => throw new Exception("Impossible"),
+            FileType.Audio when Size > MaxAudioExtractSize => false,
             _ => true
         };
-    }
 
     public static bool HashEquals(byte[] hash) => 
         hash.AsValueEnumerable().SequenceEqual(hash);
-    
     public bool HashEquals(UploadFile other) => 
         HashEquals(other.Hash);
 }
@@ -67,7 +55,6 @@ public enum FileType
 {
     Audio,
     Archive,
-    Image,
     Unsupported
 }
 
@@ -75,6 +62,4 @@ public enum FileStatus
 {
     Uploading,
     Uploaded
-    //Deleted
 }
-

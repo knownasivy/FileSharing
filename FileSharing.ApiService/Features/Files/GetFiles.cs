@@ -15,13 +15,23 @@ public class GetFiles
     
     public static async Task<IResult> Handler(
         ILogger<Endpoint> logger, 
-        IFileService fileService,
-        string? uploadId)
+        IWebHostEnvironment env,
+        IUploadFileService uploadFileService,
+        string? uploadId = null)
     {
+        // TODO: Better errors.
         if (uploadId is null)
-            return Results.Ok(await fileService.GetAllAsync());
+        {
+            return env.IsProduction() ? 
+                Results.NotFound() : Results.Ok(await uploadFileService.GetAllAsync());
+        }
         
-        return Guid.TryParseExact(uploadId, "N", out var id) ? 
-            Results.Ok(await fileService.GetAllByUploadIdAsync(id)) : Results.InternalServerError();
+        if (!Guid.TryParse(uploadId, out var id))
+            return Results.BadRequest();
+
+        var uploads = await uploadFileService.GetAllByUploadIdAsync(id);
+
+        return uploads is not null ? 
+            Results.Ok(uploads) : Results.NotFound();
     }
 }

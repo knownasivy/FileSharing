@@ -64,7 +64,7 @@
       }
     ]
   },
-  "description": "ASP.NET Core endpoint metrics from OpenTelemetry",
+  "description": "MonkiFiles endpoint metrics",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -77,7 +77,7 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": " ASP.NET Core",
+      "title": " MonkiFiles",
       "tooltip": "",
       "type": "link",
       "url": "/d/KdDACDp4z/asp-net-core-metrics"

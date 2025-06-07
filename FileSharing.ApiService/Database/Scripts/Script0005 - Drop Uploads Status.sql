@@ -1,0 +1,1 @@
+alter table Uploads drop column Status;

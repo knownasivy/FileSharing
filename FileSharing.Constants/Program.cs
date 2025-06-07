@@ -16,12 +16,17 @@ public static class ProjectNames
 
 public static class Storage
 {
-    public static TimeSpan MaxFileDuration = TimeSpan.FromMinutes(45);
+    public static readonly TimeSpan MaxAudioFileProcessDuration = TimeSpan.FromMinutes(45);
+    
     public const string Bucket = "files";
-    public const int BufferSize = 80 * 1024; // 80 KB per second
-    public const long MaxCachedFileSize = 15L * 1024 * 1024; // 15 MB
-    public const long MaxMemCacheSize = 2L * 1024 * 1024 * 1024; // 2 GB
-    public const long MaxFileSize = 1L * 1024 * 1024 * 1024; // 1 GB
+    public const int MaxFilesPerUpload = 35;
+    public const long MaxCachedFileSize = 10L * 1024 * 1024; // 10 MB
+    public const long MaxMemCacheSize = 4L * 1024 * 1024 * 1024; // 3 GB
+    public const long MaxFileSize = 400 * 1024 * 1024; // 400 MB
+    
+    public const int SmallBufferSize = 4 * 1024;
+    public const int MediumBufferSize = 8 * 1024;
+    public const int LargeBufferSize = 64 * 1024;
 }
 
 public static class Misc

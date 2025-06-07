@@ -19,22 +19,22 @@ public class Protection
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (_env.IsDevelopment())
-        {
-            if (!context.Request.Headers.ContainsKey("X-Forwarded-For"))
-            {
-                context.Request.Headers["X-Forwarded-For"] = Misc.DefaultIp;
-            }
-        }
-        
-        // TODO: CRSF?
-        if (!context.Request.Headers.ContainsKey("X-Forwarded-For"))
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            await context.Response.WriteAsync("Forbidden");
-            return;
-        }
-        
+        // if (_env.IsDevelopment())
+        // {
+        //     if (!context.Request.Headers.ContainsKey("X-Forwarded-For"))
+        //     {
+        //         context.Request.Headers["X-Forwarded-For"] = Misc.DefaultIp;
+        //     }
+        // }
+        //
+        // // TODO: CRSF?
+        // if (!context.Request.Headers.ContainsKey("X-Forwarded-For"))
+        // {
+        //     context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        //     await context.Response.WriteAsync("Forbidden");
+        //     return;
+        // }
+        //
         await _next(context);
     }
 }

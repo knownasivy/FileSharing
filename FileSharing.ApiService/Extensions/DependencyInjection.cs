@@ -16,13 +16,16 @@ public static class DependencyInjection
             .GetConnectionString(ProjectNames.GetConnectionString(env.IsDevelopment()))));
         services.AddSingleton<ICloudService, CloudService>();
         services.AddSingleton<IUploadService, UploadService>();
-        services.AddSingleton<IFileService, FileService>();
+        services.AddSingleton<IUploadFileService, UploadFileService>();
         services.AddSingleton<IMetadataService, MetadataService>();
         services.AddSingleton<IDownloadService, DownloadService>();
+        services.AddSingleton<IMetricsService, MetricsService>();
         
         services.AddSingleton<IMetadataProcessor, MetadataProcessor>();
         services.AddHostedService<MetadataProcessor>(provider => (MetadataProcessor) 
             provider.GetRequiredService<IMetadataProcessor>());
+
+        services.AddHostedService<CleanUpTask>();
 
         return services;
     }

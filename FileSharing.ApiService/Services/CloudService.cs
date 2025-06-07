@@ -11,7 +11,7 @@ public interface ICloudService
 {
     Task<bool> UploadAsync(string key, string filePath, string contentType);
     Task<bool> UploadAsync(string key, Stream fileStream, string contentType);
-    Task<string?> GetPreviewFile(string key);
+    Task<string?> GetPreviewFileUrl(string key);
 }
 
 // TODO: Add other methods like uploading etc
@@ -93,7 +93,7 @@ public class CloudService : ICloudService
         return true;
     }
 
-    public async Task<string?> GetPreviewFile(string key)
+    public async Task<string?> GetPreviewFileUrl(string key)
     {
         var result = await _cache.GetOrCreateAsync<string?>(
             key: $"preview:{key}",

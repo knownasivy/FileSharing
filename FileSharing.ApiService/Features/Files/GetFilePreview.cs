@@ -1,4 +1,5 @@
-﻿using FileSharing.ApiService.Extensions;
+﻿using Microsoft.Net.Http.Headers;
+using FileSharing.ApiService.Extensions;
 using FileSharing.ApiService.Models;
 using FileSharing.ApiService.Services;
 
@@ -10,47 +11,65 @@ public class GetFilePreview
     {
         public void MapEndpoint(IEndpointRouteBuilder app)
         {
-            app.MapGet("files/{fileId}/preview", Handler).WithTags("Files");
+            app.MapGet("files/{fileId:guid}/preview", Handler).WithTags("Files");
         }
     }
     
     public static async Task<IResult> Handler(
         IHttpClientFactory httpClientFactory,
         ILogger<Endpoint> logger, 
-        IFileService fileService,
+        IUploadFileService uploadFileService,
         ICloudService cloudService, 
-        string fileId)
+        HttpContext context,
+        Guid fileId)
     {
-        // For using in swagger or whatever
-        fileId = fileId.Replace("-", "");
-        if (!Guid.TryParseExact(fileId, "N", out var id))
-            return Results.NotFound();
-        
-        var file = await fileService.GetByIdAsync(id);
+        // TODO: Better errors.        
+        var file = await uploadFileService.GetByIdAsync(fileId);
         if (file is null)
             return Results.NotFound();
         
         if (file.Type == FileType.Archive) return Results.BadRequest();
 
         if (file.FakeFile)
-            file = await fileService.GetByHashAsync(file.Hash);
+            file = await uploadFileService.GetRealByHashAsync(file.Hash);
         
         if (file is null)
             return Results.NotFound();
         
-        var preview = await cloudService.GetPreviewFile(file.GetPreviewFilename());
-        var client = httpClientFactory.CreateClient();
+        var previewUrl = await cloudService.GetPreviewFileUrl(file.GetPreviewFilename());
+        if (previewUrl is null)
+            return Results.NotFound();
         
+        var client = httpClientFactory.CreateClient();
         try
         {
-            var contentType = file.Type == FileType.Audio 
-                ? "audio/mp4" : "image/webp";
-        
-            using var response = await client.GetAsync(preview);
+            var response = await client.GetAsync(
+                previewUrl,
+                HttpCompletionOption.ResponseHeadersRead
+            );
+                
             response.EnsureSuccessStatusCode();
 
-            var previewBytes = await response.Content.ReadAsByteArrayAsync();
-            return Results.Bytes(previewBytes, contentType, file.GetPreviewFilename());
+            var remoteStream = await response.Content.ReadAsStreamAsync();
+            
+            var headers = context.Response.GetTypedHeaders();
+            headers.CacheControl = new CacheControlHeaderValue
+            {
+                Public = true,
+                MaxAge = TimeSpan.FromHours(3)
+            };
+            
+            return Results.Stream(
+                async outputStream =>
+                {
+                    await remoteStream.CopyToAsync(
+                        outputStream, 
+                        bufferSize: 8 * 1024,
+                        context.RequestAborted);
+                },
+                "audio/mp4",
+                file.GetPreviewFilename()
+            );
         }
         catch(Exception ex)
         {

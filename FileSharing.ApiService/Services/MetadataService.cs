@@ -1,5 +1,4 @@
 ﻿using System.Collections.Immutable;
-using Amazon.S3.Model;
 using Dapper;
 using FFMpegCore;
 using FileSharing.ApiService.Models;
@@ -17,16 +16,13 @@ public interface IMetadataService
     // Task<IMetadata?> CreateAsync(FileUpload file, string filePath);
     // Task<IMetadata?> GetByFileAsync(FileUpload file);
     
-    Task<bool> ProcessFile(UploadFile file, string filePath);
+    Task<bool> ProcessFile(UploadFile file);
     
-    Task<AudioMetadata?> CreateAudioMetadata(UploadFile file, string filePath);
+    Task<AudioMetadata?> CreateAudioMetadata(UploadFile file);
     Task<AudioMetadata?> GetAudioMetadataByFileId(Guid fileId);
     
-    Task<ZipMetadata?> CreateZipMetadata(UploadFile file, string filePath);
+    Task<ZipMetadata?> CreateZipMetadata(UploadFile file);
     Task<ZipMetadata?> GetZipMetadataByFileId(Guid fileId);
-
-    // Not really metadata
-    Task<bool> ProcessImageFile(UploadFile file, string filePath);
 }
 
 public class MetadataService : IMetadataService
@@ -44,9 +40,10 @@ public class MetadataService : IMetadataService
         _logger = logger;
     }
 
-    public async Task<bool> ProcessFile(UploadFile file, string filePath)
+    public async Task<bool> ProcessFile(UploadFile file)
     {
         if (file.Status != FileStatus.Uploaded) throw new Exception("File not uploaded");
+        if (file.Hash.Length == 0) throw new Exception("File has no hash");
         
         if (file.Type == FileType.Archive &&
             !file.Extension.Equals("zip", StringComparison.OrdinalIgnoreCase)) return true;
@@ -59,39 +56,34 @@ public class MetadataService : IMetadataService
             {
                 case FileType.Audio:
                 {
-                    var metadata = await CreateAudioMetadata(file, filePath);
+                    var metadata = await CreateAudioMetadata(file);
                     if (metadata is null) return false;
                     
                     await using var connection = await _dataSource.OpenConnectionAsync();
             
                     await connection.ExecuteAsync(
                         """
-                        INSERT INTO AudioMetadata (FileId, Title, Album, Artist, AttachedPic)
-                        VALUES (@FileId, @Title, @Album, @Artist, @AttachedPic)
+                        INSERT INTO AudioMetadata (FileHash, Title, Album, Artist, AttachedPic)
+                        VALUES (@FileHash, @Title, @Album, @Artist, @AttachedPic)
                         """, metadata);
                     return true;
                 }
                 case FileType.Archive:
                 {
-                    var metadata = await CreateZipMetadata(file, filePath);
+                    var metadata = await CreateZipMetadata(file);
                     if (metadata is null) return false;
                     
                     await using var connection = await _dataSource.OpenConnectionAsync();
             
                     await connection.ExecuteAsync(
                         """
-                        INSERT INTO ZipMetadata (FileId, Files, Password)
-                        VALUES (@FileId, @Files, @Password)
+                        INSERT INTO ZipMetadata (FileHash, Files, Password)
+                        VALUES (@FileHash, @Files, @Password)
                         """, metadata);
                     return true;
                 }
-                case FileType.Image:
-                    await ProcessImageFile(file, filePath);
-                    return true;
-                case FileType.Unsupported:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
+                case FileType.Unsupported: break;
+                default: throw new ArgumentOutOfRangeException();
             }
         }
         catch (Exception ex)
@@ -102,18 +94,18 @@ public class MetadataService : IMetadataService
         return false;
     }
 
-    public async Task<AudioMetadata?> CreateAudioMetadata(UploadFile file, string filePath)
+    public async Task<AudioMetadata?> CreateAudioMetadata(UploadFile file)
     {
         if (file.Type != FileType.Audio) throw new Exception("Impossible");
-        
-        var mediaInfo = await FFProbe.AnalyseAsync(filePath);
-        if (mediaInfo.Duration > Storage.MaxFileDuration 
+
+        var mediaInfo = await FFProbe.AnalyseAsync(file.GetThisFilePath());
+        if (mediaInfo.Duration > Storage.MaxAudioFileProcessDuration 
             || mediaInfo.ErrorData.Count != 0)
         {
             return null;
         }
         
-        var metadata = new AudioMetadata { FileId = file.Id };
+        var metadata = new AudioMetadata { FileHash = file.Hash };
         
         var videoStream = mediaInfo.PrimaryVideoStream;
         if (videoStream?.Disposition is not null &&
@@ -154,7 +146,7 @@ public class MetadataService : IMetadataService
         }
         
         var previewFileName = $"{file.Id:N}_prev.m4a";
-        var audioFile = await ConvertAudioToPreviewFileAsync(filePath);
+        var audioFile = await ConvertAudioToPreviewFileAsync(file.GetThisFilePath());
         
         try
         {
@@ -162,7 +154,7 @@ public class MetadataService : IMetadataService
                 !File.Exists(audioFile) ||
                 new FileInfo(audioFile).Length > file.Size)
             {
-                await using var inputStream = File.Open(filePath, FileMode.Open, FileAccess.Read);
+                await using var inputStream = File.Open(file.GetThisFilePath(), FileMode.Open, FileAccess.Read);
 
                 await _cloudService.UploadAsync(previewFileName, inputStream, "audio/mp4");
             }
@@ -182,7 +174,7 @@ public class MetadataService : IMetadataService
         if (!metadata.AttachedPic) return metadata;
         
         var coverFileName = $"{file.Id:N}_cover.webp";
-        var coverFile = await ExtractAudioCoverArt(filePath);
+        var coverFile = await ExtractAudioCoverArt(file.GetThisFilePath());
         
         try
         {
@@ -205,18 +197,26 @@ public class MetadataService : IMetadataService
     public async Task<AudioMetadata?> GetAudioMetadataByFileId(Guid fileId)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        var query = connection.SqlBuilder($"SELECT * FROM AudioMetadata WHERE FileId = {fileId} LIMIT 1");
+        var query = connection.SqlBuilder(
+            $"""
+             SELECT audio.*
+             FROM UploadFiles file
+                 JOIN AudioMetadata audio ON audio.FileHash = file.Hash
+             WHERE file.Id = {fileId}
+             LIMIT 1
+             """);
+
         return await query.QueryFirstOrDefaultAsync<AudioMetadata>();
     }
 
-    public async Task<ZipMetadata?> CreateZipMetadata(UploadFile file, string filePath)
+    public async Task<ZipMetadata?> CreateZipMetadata(UploadFile file)
     {
         if (file.Type != FileType.Archive) throw new Exception("Impossible");
         if (file.Extension != "zip") return null;
 
-        var metadata = new ZipMetadata { FileId = file.Id };
+        var metadata = new ZipMetadata { FileHash = file.Hash };
         
-        await using var stream = File.OpenRead(filePath);
+        await using var stream = File.OpenRead(file.GetThisFilePath());
         using var zipFile = new ZipFile(stream);
         
         foreach (ZipEntry entry in zipFile)
@@ -232,15 +232,18 @@ public class MetadataService : IMetadataService
     public async Task<ZipMetadata?> GetZipMetadataByFileId(Guid fileId)
     {
         await using var connection = await _dataSource.OpenConnectionAsync();
-        var query = connection.SqlBuilder($"SELECT * FROM ZipMetadata WHERE FileId = {fileId} LIMIT 1");
+        var query = connection.SqlBuilder(
+            $"""
+             SELECT zip.*
+             FROM UploadFiles file
+                 JOIN ZipMetadata zip ON zip.FileHash = file.Hash
+             WHERE file.Id = {fileId}
+             LIMIT 1
+             """);
+
         return await query.QueryFirstOrDefaultAsync<ZipMetadata>();
     }
 
-    public Task<bool> ProcessImageFile(UploadFile file, string filePath)
-    {
-        throw new NotImplementedException();
-    }
-    
     private static async Task<string> ConvertAudioToPreviewFileAsync(string inputFilePath)
     {
         var tempPreviewPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.m4a");

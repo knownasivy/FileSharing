@@ -14,12 +14,14 @@
         <PackageReference Include="dbup-postgresql" Version="6.0.3" />
         <PackageReference Include="FFMpegCore" Version="5.2.0" />
         <PackageReference Include="FluentValidation" Version="12.0.0" />
+        <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
         <PackageReference Include="InterpolatedSql.Dapper" Version="2.4.0" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.5"/>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="9.5.0" />
         <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.0-preview.4.25258.110" />
+        <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.12.0-beta.1" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
         <PackageReference Include="SharpZipLib" Version="1.4.2" />
-        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="8.1.2" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="8.1.2" />
         <PackageReference Include="System.IO.Hashing" Version="9.0.4" />
@@ -34,6 +36,20 @@
     <ItemGroup>
       <EmbeddedResource Include="Database\Scripts\Script0001 - Create tables.sql" />
       <EmbeddedResource Include="Database\Scripts\Script0002 - Add tables.sql" />
+      <None Remove="Database\Scripts\Script0003 - Add Files Amount.sql" />
+      <EmbeddedResource Include="Database\Scripts\Script0003 - Add Files Amount.sql" />
+      <None Remove="Database\Scripts\Script0004 - Change metadata.sql" />
+      <EmbeddedResource Include="Database\Scripts\Script0004 - Change metadata.sql" />
+      <None Remove="Database\Scripts\Script0005 - Drop Uploads Status.sql" />
+      <EmbeddedResource Include="Database\Scripts\Script0005 - Drop Uploads Status.sql" />
+      <None Remove="Database\Scripts\Script0006 - Add FileCount Constraint.sql" />
+      <EmbeddedResource Include="Database\Scripts\Script0006 - Add FileCount Constraint.sql" />
+      <None Remove="Database\Scripts\Script0007 - Add FilePath to UploadFile.sql" />
+      <EmbeddedResource Include="Database\Scripts\Script0007 - Add FilePath to UploadFile.sql" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Uploads\" />
     </ItemGroup>
 
 </Project>
