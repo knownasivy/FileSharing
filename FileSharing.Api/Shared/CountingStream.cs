@@ -2,20 +2,20 @@
 
 namespace FileSharing.Api.Shared;
 
-public class CountingStream : Stream
+public class CountingStream(
+    Stream innerStream,
+    Action<int> bytesReadUpdateCallback,
+    ILogger<CountingStream>? logger = null
+) : Stream
 {
-    private readonly Stream _innerStream;
-    private readonly Action<int> _bytesReadCallback;
-    private readonly ILogger<CountingStream> _logger;
+    private readonly Stream _innerStream =
+        innerStream ?? throw new ArgumentNullException(nameof(innerStream));
+    private readonly Action<int> _bytesReadCallback =
+        bytesReadUpdateCallback ?? throw new ArgumentNullException(nameof(bytesReadUpdateCallback));
+    private readonly ILogger<CountingStream> _logger =
+        logger ?? NullLogger<CountingStream>.Instance;
     private bool _disposed;
-    
-    public CountingStream(Stream innerStream, Action<int> bytesReadUpdateCallback, ILogger<CountingStream>? logger = null)
-    {
-        _innerStream = innerStream ?? throw new ArgumentNullException(nameof(innerStream));
-        _bytesReadCallback = bytesReadUpdateCallback ?? throw new ArgumentNullException(nameof(bytesReadUpdateCallback));
-        _logger = logger ?? NullLogger<CountingStream>.Instance;
-    }
-    
+
     private void UpdateBytesRead(int bytesRead)
     {
         if (bytesRead > 0)
@@ -35,7 +35,7 @@ public class CountingStream : Stream
             _logger.LogError(ex, "Error in bytes read callback for {BytesRead} bytes", newBytes);
         }
     }
-    
+
     private void ThrowIfDisposed()
     {
         if (!_disposed)
@@ -45,7 +45,7 @@ public class CountingStream : Stream
 
         throw new ObjectDisposedException(nameof(CountingStream));
     }
-    
+
     protected override void Dispose(bool disposing)
     {
         if (!disposing || _disposed)
@@ -55,10 +55,10 @@ public class CountingStream : Stream
 
         _innerStream.Dispose();
         _disposed = true;
-        
+
         base.Dispose(disposing);
     }
-    
+
     public override async ValueTask DisposeAsync()
     {
         if (!_disposed)
@@ -74,15 +74,15 @@ public class CountingStream : Stream
     public override int Read(byte[] buffer, int offset, int count)
     {
         ThrowIfDisposed();
-        int bytesRead = _innerStream.Read(buffer, offset, count);
+        var bytesRead = _innerStream.Read(buffer, offset, count);
         UpdateBytesRead(bytesRead);
         return bytesRead;
     }
-    
+
     public override int ReadByte()
     {
         ThrowIfDisposed();
-        int result = _innerStream.ReadByte();
+        var result = _innerStream.ReadByte();
         if (result != -1)
         {
             UpdateBytesRead(1);
@@ -90,70 +90,92 @@ public class CountingStream : Stream
 
         return result;
     }
-    
-    public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+
+    public override async Task<int> ReadAsync(
+        byte[] buffer,
+        int offset,
+        int count,
+        CancellationToken cancellationToken
+    )
     {
         ThrowIfDisposed();
-        int bytesRead = await _innerStream.ReadAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
+        var bytesRead = await _innerStream
+            .ReadAsync(buffer.AsMemory(offset, count), cancellationToken)
+            .ConfigureAwait(false);
         UpdateBytesRead(bytesRead);
         return bytesRead;
     }
-    
-    public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+
+    public override async ValueTask<int> ReadAsync(
+        Memory<byte> buffer,
+        CancellationToken cancellationToken = default
+    )
     {
         ThrowIfDisposed();
-        int bytesRead = await _innerStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+        var bytesRead = await _innerStream
+            .ReadAsync(buffer, cancellationToken)
+            .ConfigureAwait(false);
         UpdateBytesRead(bytesRead);
         return bytesRead;
     }
-    
+
     public override void Write(byte[] buffer, int offset, int count)
     {
         ThrowIfDisposed();
         _innerStream.Write(buffer, offset, count);
     }
-    
-    public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+
+    public override async Task WriteAsync(
+        byte[] buffer,
+        int offset,
+        int count,
+        CancellationToken cancellationToken
+    )
     {
         ThrowIfDisposed();
-        await _innerStream.WriteAsync(buffer.AsMemory(offset, count), cancellationToken).ConfigureAwait(false);
+        await _innerStream
+            .WriteAsync(buffer.AsMemory(offset, count), cancellationToken)
+            .ConfigureAwait(false);
     }
-    
-    public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+
+    public override async ValueTask WriteAsync(
+        ReadOnlyMemory<byte> buffer,
+        CancellationToken cancellationToken = default
+    )
     {
         ThrowIfDisposed();
         await _innerStream.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
     }
-    
-    public override void Flush() 
+
+    public override void Flush()
     {
         ThrowIfDisposed();
         _innerStream.Flush();
     }
-    
-    public override Task FlushAsync(CancellationToken cancellationToken) 
+
+    public override Task FlushAsync(CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         return _innerStream.FlushAsync(cancellationToken);
     }
-    
-    public override long Seek(long offset, SeekOrigin origin) 
+
+    public override long Seek(long offset, SeekOrigin origin)
     {
         ThrowIfDisposed();
         return _innerStream.Seek(offset, origin);
     }
-    
-    public override void SetLength(long value) 
+
+    public override void SetLength(long value)
     {
         ThrowIfDisposed();
         _innerStream.SetLength(value);
     }
-    
+
     public override bool CanRead => !_disposed && _innerStream.CanRead;
     public override bool CanSeek => !_disposed && _innerStream.CanSeek;
     public override bool CanWrite => !_disposed && _innerStream.CanWrite;
-    
-    public override long Length 
+
+    public override long Length
     {
         get
         {
@@ -161,7 +183,7 @@ public class CountingStream : Stream
             return _innerStream.Length;
         }
     }
-    
+
     public override long Position
     {
         get
@@ -176,4 +198,3 @@ public class CountingStream : Stream
         }
     }
 }
-

@@ -7,9 +7,7 @@ namespace FileSharing.Api.Extensions;
 
 public static class Configuration
 {
-    public static void AddServicesConfiguration(
-        this IServiceCollection services,
-        IWebHostEnvironment env)
+    public static void AddServicesConfiguration(this IServiceCollection services)
     {
         services.Configure<FormOptions>(options =>
         {
@@ -24,14 +22,29 @@ public static class Configuration
             options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(5);
             options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(5);
         });
-        
+
         services.Configure<ForwardedHeadersOptions>(options =>
         {
-            options.ForwardedHeaders = 
+            options.ForwardedHeaders =
                 ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-            
-            options.KnownNetworks.Clear();
+
             options.KnownProxies.Clear();
+        });
+
+        services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy
+                    .WithOrigins(
+                        "https://monkifiles.org",
+                        "https://www.monkifiles.org",
+                        "https://botmert.dev",
+                        "https://www.botmert.dev"
+                    )
+                    .AllowAnyHeader()
+                    .AllowAnyMethod();
+            });
         });
     }
 }

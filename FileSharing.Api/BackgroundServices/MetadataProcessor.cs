@@ -12,33 +12,38 @@ public interface IMetadataProcessor
 public class MetadataProcessor : BackgroundService, IMetadataProcessor
 {
     private record MetadataItem(UploadFile File);
-    
+
     private readonly IMetadataService _metadataService;
     private readonly ILogger<MetadataProcessor> _logger;
     private readonly Channel<MetadataItem> _channel;
     private readonly ChannelWriter<MetadataItem> _writer;
-    private readonly int _maxWorkers = 1;
-    
+    private const int _maxWorkers = 1;
+
     public MetadataProcessor(IMetadataService metadataService, ILogger<MetadataProcessor> logger)
     {
         _metadataService = metadataService;
         _logger = logger;
-        
+
         var options = new BoundedChannelOptions(250)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = false,
-            SingleWriter = false
+            SingleWriter = false,
         };
         _channel = Channel.CreateBounded<MetadataItem>(options);
         _writer = _channel.Writer;
     }
-    
-    public async Task<bool> EnqueueAsync(UploadFile file, CancellationToken cancellationToken = default)
+
+    public async Task<bool> EnqueueAsync(
+        UploadFile file,
+        CancellationToken cancellationToken = default
+    )
     {
         try
         {
-            await _writer.WriteAsync(new MetadataItem(file), cancellationToken).ConfigureAwait(true);
+            await _writer
+                .WriteAsync(new MetadataItem(file), cancellationToken)
+                .ConfigureAwait(true);
             return true;
         }
         catch (InvalidOperationException)
@@ -78,8 +83,12 @@ public class MetadataProcessor : BackgroundService, IMetadataProcessor
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error processing metadata for {FilePath}, FileId: {FileId}", 
-                            request.File.FilePath, request.File.Id);
+                        _logger.LogError(
+                            ex,
+                            "Error processing metadata for {FilePath}, FileId: {FileId}",
+                            request.File.FilePath,
+                            request.File.Id
+                        );
                     }
                 }
             }

@@ -1,5 +1,4 @@
-﻿using Microsoft.Net.Http.Headers;
-using FileSharing.Api.Extensions;
+﻿using FileSharing.Api.Extensions;
 using FileSharing.Api.Models;
 using FileSharing.Api.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -13,16 +12,17 @@ public static class GetFilePreview
         public void MapEndpoint(IEndpointRouteBuilder app) =>
             app.MapGet("site/files/{fileId:guid}/preview", Handler).WithTags("Files Site");
     }
-    
+
     public static async Task<IResult> Handler(
-        ILogger<Endpoint> logger, 
+        ILogger<Endpoint> logger,
         IUploadFileService uploadFileService,
         IDownloadService downloadService,
         HttpContext context,
         Guid fileId,
         [FromQuery] string? type = "default",
         [FromQuery] string? version = "normal",
-        CancellationToken ct = default)
+        CancellationToken ct = default
+    )
     {
         var fixedType = type switch
         {
@@ -30,20 +30,19 @@ public static class GetFilePreview
             "video" => "mp4",
             "default" => "m4a",
             null => "m4a",
-            _ => null
+            _ => null,
         };
-        
+
         var fixedVersion = version switch
         {
             null => "normal",
             "fast" or "normal" => version,
-            _ => null
+            _ => null,
         };
 
-
-        if (fixedType is null || fixedVersion is null) 
+        if (fixedType is null || fixedVersion is null)
             return Results.NotFound();
-        
+
         // TODO: Better errors.
         var validFile = await uploadFileService.GetIsFileTypeById(fileId, FileType.Audio);
         if (!validFile)
@@ -57,12 +56,13 @@ public static class GetFilePreview
             return Results.Problem("Could not determine IP address");
 
         var ipAddress = ip.MapToIPv4().ToString();
-        
+
         return await downloadService.GetPreviewByIdAsync(
-            id: fileId, 
-            ip: ipAddress, 
-            type: fixedType, 
-            version: fixedVersion, 
-            token: ct);
+            id: fileId,
+            ip: ipAddress,
+            type: fixedType,
+            version: fixedVersion,
+            token: ct
+        );
     }
 }

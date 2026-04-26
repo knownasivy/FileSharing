@@ -17,14 +17,13 @@ WORKDIR "/src/FileSharing.Api"
 RUN dotnet build "FileSharing.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "FileSharing.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Download ffmpeg instead
+# Option to download?
 
 COPY --from=my-ffmpeg-static:latest /ffmpeg /usr/local/bin/
 COPY --from=my-ffmpeg-static:latest /ffprobe /usr/local/bin/
