@@ -6,6 +6,6 @@ riderModule.iml
 **/Uploads/**
 .idea/
 FileSharing.sln.DotSettings.user
-FileSharing.Api/appsettings.json
-.env.prod
-.env.dev
+.env*
+!.env.sample
+appsettings.json
